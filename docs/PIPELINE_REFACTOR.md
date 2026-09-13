@@ -237,15 +237,18 @@ system by accident.
    Still TODO: surface multi-pass *execution* + between-pass Stop (#7) for payloads that
    exceed even the ceiling (currently the planner flags multipass; callers that split
    their own payloads — batch_processor — should consult it).
-6. Migrate explicit budget callers to the governor and delete the old budget modules
-   (`batch_budget`, Formslator `resource_budget`, KV `cpu_budget`, Ludicity
-   `narrative_budget`) — now lower urgency since `llm_bridge` covers every call. The
-   Formslator Review consistency pass still hard-truncates at 1200 chars (partial
-   coverage, not an error) — give it real chunking here.
-7. Build `grounding.py` in Core (sources-only); migrate callers. Shared "LLM task"
-   helper (#6) as they converge.
-8. Add the `verify_imports.py` guard + update `EXTENSION_TEMPLATE.md` /
-   `SERVICE_TEMPLATE.md` so new surfaces must use the spine.
+6. **[REMAINING — invasive, verify in-app]** Migrate explicit budget callers to the
+   governor and delete the old budget modules (`batch_budget`, Formslator
+   `resource_budget`, KV `cpu_budget`, Ludicity `narrative_budget`) — now lower urgency
+   since `llm_bridge` covers every call. Give the Formslator Review consistency pass
+   real chunking (still hard-truncates at 1200 chars — partial coverage, not an error).
+7. **[REMAINING — most value at the Extended port]** Build `grounding.py`. In Core
+   (offline) the source path is already centralized in `context_builder`; the big win is
+   unifying Extended's narrow keyword gating (`grounded_chat`) + web branch, so build the
+   resolver together with the Extended port. Shared "LLM task" helper (#6) as callers converge.
+8. `verify_imports.py` spine-boundary guard (no direct `ollama`/`openai` imports).
+   **[DONE, commit b163ed0]** Still TODO: update `EXTENSION_TEMPLATE.md` /
+   `SERVICE_TEMPLATE.md` to require the spine.
 9. Update the `.spec` hiddenimports/datas for the new modules (`services/persistence`,
    `services/context_governor`); verify a clean `.exe`.
 10. Port to Extended via the ledger (resolver gains the web branch; apply Core changes
