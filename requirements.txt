@@ -1,0 +1,106 @@
+# LOMA runtime dependencies
+nicegui>=2.0.0
+ollama>=0.1.8
+psutil>=5.9.0
+PyYAML>=6.0
+python-dotenv>=1.0.1
+requests>=2.31.0
+
+# Document & web tools
+pypdf>=4.2.0
+PyMuPDF>=1.24.0
+python-docx>=1.1.0
+python-pptx>=0.6.23
+xlsxwriter>=3.2.0
+mammoth>=1.6.0
+markdown>=3.5
+openpyxl>=3.1.0
+lxml>=5.0
+pandas>=2.0
+matplotlib>=3.8.0
+Pillow>=10.0.0
+playwright>=1.43.0
+trafilatura>=1.6.0
+tiktoken>=0.7.0
+rank_bm25>=0.2.2
+
+# Offline voice reply (SAPI on Windows / `say` on macOS / espeak-ng on Linux — see
+# services/tts_engines.py; no cloud TTS API, Core Edition is offline-only). pydub +
+# imageio-ffmpeg transcode the synthesized WAV/AIFF to MP3 for the existing playback
+# pipeline. pywin32 (below) is what SAPI is driven through on Windows.
+pydub>=0.25.0
+imageio-ffmpeg>=0.5.0
+
+# Chinese script conversion, both directions: Simplified->Traditional for local dictation
+# (zh_tw UI locale), Traditional->Simplified before Piper voice reply (services/tts_engines.py
+# _to_simplified — Piper's zh_CN voice only phonemizes Simplified characters correctly).
+opencc-python-reimplemented>=0.1.7
+
+# Document Intelligence (BM25 lexical search, encrypted Office files)
+msoffcrypto-tool>=5.0.0
+# Legacy .doc -> .docx conversion via Word COM automation (needs Microsoft Word installed)
+pywin32>=306; sys_platform == "win32"
+
+# Deep document search (RAG) — Document Intelligence's Deep search mode. Bundled
+# unconditionally (not "optional add-on" style) so all 4 of Core Edition's bundled
+# extensions (document_editor, chat_archive_manager, formslator, document_intelligence)
+# work out of the box with no first-run download.
+chromadb>=0.5.0
+langchain-chroma>=0.2.0
+langchain-core>=0.3.0
+langchain-huggingface>=0.1.0
+sentence-transformers>=3.0.0
+torch>=2.2.0
+transformers>=4.40.0
+
+# Sound/video transcription (faster-whisper + SenseVoice) — Core Edition's documented
+# sound/video INPUT support. These are the packages only; the multi-GB model weights
+# stay a first-run download via the setup wizard / Model Library, same as before, since
+# bundling every model size would make the installer itself multi-gigabyte.
+faster-whisper>=1.0.0
+funasr>=1.0.0
+torchaudio>=2.2.0
+
+# Offline voice reply (see services/tts_engines.py) — bundled unconditionally now (see
+# packaging/loma_core.spec hiddenimports), voice models themselves stay a first-run
+# download. The [zh] extra (g2pW + unicode-rbnf + sentence-stream) is required, not
+# optional — without it, every espeak-based zh_CN voice (huayan, chaowen) still works, but
+# the zh_CN-xiao_ya-medium catalog entry (the only pinyin/g2pW-based voice) fails with a
+# misleading "# channels not specified" wave-module error that masks the real
+# ModuleNotFoundError/RuntimeError underneath (confirmed via direct reproduction).
+piper-tts[zh]>=1.4.0
+
+# Image generation (SD 1.5 + LCM) — NOT part of Core Edition (no image-output extension
+# is bundled here; see EDITIONS.md), kept only for other LOMA builds that reuse this file.
+# torchvision, diffusers, accelerate, safetensors, and peft are excluded from Core
+# Edition's packaged build (packaging/loma_core.spec) even if installed in this venv.
+torchvision>=0.27.0
+diffusers>=0.30.0
+accelerate>=0.30.0
+safetensors>=0.4.0
+peft>=0.11.0
+# Required for the flux_klein_gguf pipeline family (services/image_generation.py) to
+# load the .gguf transformer/text-encoder checkpoints — diffusers silently masks its
+# absence as a generic "Unable to load weights from checkpoint file" error instead of
+# the real ImportError, so this is easy to miss until a GGUF load is actually attempted.
+gguf>=0.10.0
+# EAST scene-text detection (services/image_text_detection.py) — the reseed-verify loop
+# that catches diffusion-hallucinated garbled text before it ships. CPU-only, no VRAM/
+# governor contention. -headless (no GUI bindings) since this is a server app with no
+# window system to draw into. The model file itself is bundled (assets/east_text_detector/),
+# not downloaded — see packaging/loma_core.spec.
+opencv-python-headless>=4.8.0
+
+# Subject cutout (services/image_inpaint.py::extract_subject, background remove/
+# replace) — same "not part of Core Edition" scope as the image generation block
+# above. onnxruntime is pulled in automatically as rembg's own dependency.
+rembg>=2.0.0
+
+# GPU PyTorch (Windows + NVIDIA — recommended; CPU torch is much slower):
+#   .\venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# Apple Silicon (MPS — default pip torch usually includes it):
+#   ./venv/bin/python -m pip install torch torchvision
+#
+# Image generation tuning (environment variables):
+# LOMA_IMAGE_QUALITY=fast|balanced|quality  (default balanced: 8 steps)
+# LOMA_IMAGE_STEPS=8  LOMA_IMAGE_GUIDANCE=2.2

@@ -1,0 +1,68 @@
+{
+  "extensions": [
+    {
+      "id": "document_editor",
+      "title": "Document Editor",
+      "description": "View, edit, export, and highlight Office documents and PDFs.",
+      "category": "productivity",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "chat_archive_manager",
+      "title": "Chat Archive",
+      "description": "Save and reload conversation archives.",
+      "category": "utility",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "document_intelligence",
+      "title": "Document Intelligence",
+      "description": "Workspace and library document tasks — Search, Ask, Analyze with Fast, Deep, and Agent reasoning.",
+      "category": "productivity",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "research",
+      "title": "Research",
+      "description": "Guided research with clarify step, web and file sources, and exportable reports.",
+      "category": "productivity",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "token_tracker",
+      "title": "Token Usage",
+      "description": "Track LLM token usage per model, totals, and custom date ranges.",
+      "category": "utility",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "web_viewer",
+      "title": "Web Viewer",
+      "description": "Browse pages and highlight content for LOMA.",
+      "category": "productivity",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "history_events",
+      "title": "History Events",
+      "description": "Real historical encounters — answer one question, then get graded A-F against what actually happened.",
+      "category": "ludicity",
+      "bundled": true,
+      "version": "0.1.0"
+    },
+    {
+      "id": "news_brief",
+      "title": "News Brief",
+      "description": "Filter news by category, region, and topic, and summarize the brief.",
+      "category": "utility",
+      "bundled": true,
+      "version": "0.1.0"
+    }
+  ]
+}

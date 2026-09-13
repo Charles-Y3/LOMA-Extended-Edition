@@ -1,0 +1,72 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- Virtual environment ---
+venv/
+.venv/
+
+# --- Runtime / user data ---
+# data/ holds uploads, chats, generated artifacts, indexes, tokens, and per-machine
+# settings — none of it belongs in source control. Only doc/example files under it
+# are allowlisted below.
+data/*
+!data/email_assistant/
+data/email_assistant/*
+!data/email_assistant/README.md
+!data/email_assistant/credentials.json.example
+
+# Secrets that must never be committed even if the allowlist above is ever loosened.
+data/email_assistant/oauth_app.json
+data/email_assistant/credentials.json
+data/email_assistant/token.json
+
+# --- Debug / log output ---
+debug-*.log
+*.log
+
+# --- Recorded / generated media that can reappear during dev or testing ---
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.ogg
+*.flac
+
+# --- Office lock files ---
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# --- IDE / editor ---
+.idea/
+.vscode/
+.cursor/
+.claude/settings.local.json
+
+# --- Build output ---
+dist/
+build/
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+
+# --- Env files ---
+.env
+.env.*
+
+# --- Large bundled model weights (fetched by CI before packaging, not stored in git —
+# GitHub hard-rejects any single file over 100MB, and these are 150-450MB) ---
+/embedding-model/
+/g2pW/
+
+# --- This machine's personal/local settings and scratch artifacts — not app source ---
+/settings.json
+/build_log*.txt
+/para_dump.txt
+/test_xiaoya_out*
+/=0.7.0
+/debug-*.log

@@ -1,0 +1,97 @@
+name: Build LOMA Core Edition
+
+# Manual trigger only — this is a large PyInstaller build (torch/transformers/chromadb
+# and friends) that can take a long time and burn a lot of Actions minutes on a private
+# repo's monthly quota, and per packaging/loma_core.spec's own "First-build note", a new
+# spec almost always needs a follow-up pass or two before it's clean. Building on every
+# push would multiply that cost while iterating. Run it explicitly from the Actions tab
+# (or `gh workflow run build.yml`) once you actually want a build.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        # funasr (SenseVoice's runtime) IS installed here now — packaging/loma_core.spec's
+        # collect_all('funasr') needs it importable in this environment at build time to
+        # bundle it (see that spec's collect_all('funasr') comment for why it's bundled
+        # instead of pip-installed on demand: the on-demand path needs a real setuptools/
+        # distutils/wheel toolchain this frozen build never had, which broke funasr's own
+        # sdist-only dependency jieba on any account without a pre-cached wheel for it).
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Download bundled embedding model
+        # Not committed to git (449MB single file exceeds GitHub's 100MB hard limit) —
+        # see services/rag_embeddings.py's _LOCAL_CANDIDATES for why it must land here.
+        # allow_patterns matches exactly the file set in the project's own curated
+        # embedding-model/ folder — an unfiltered snapshot_download() pulls the whole HF
+        # repo (43 files: duplicate pytorch_model.bin, onnx/openvino variants, etc.),
+        # ballooning this folder from ~470MB to ~2.2GB for formats nothing here ever reads.
+        shell: bash
+        run: |
+          python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='intfloat/multilingual-e5-small', local_dir='embedding-model', allow_patterns=['*.json', '**/*.json', '*.model', '*.safetensors'])"
+
+      - name: Build with PyInstaller
+        run: pyinstaller --noconfirm --clean packaging/loma_core.spec
+
+      - name: Add LICENSE, README, and user guides to the dist folder
+        shell: bash
+        run: |
+          cp LICENSE.txt "dist/LOMA Core Edition/LICENSE.txt"
+          cp packaging/DIST_README.txt "dist/LOMA Core Edition/README.txt"
+          cp packaging/user_guides/*.docx "dist/LOMA Core Edition/"
+
+      - uses: actions/upload-artifact@v4
+        # Uploading the folder directly (not a zip we make ourselves) — artifact download
+        # from the Actions UI always wraps the artifact in its own zip for transport, so
+        # pre-zipping here produced a zip-of-a-zip that needed two rounds of extraction.
+        with:
+          name: LOMA-Core-Edition-Windows
+          path: dist/LOMA Core Edition
+          retention-days: 14
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Download bundled embedding model
+        run: |
+          python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='intfloat/multilingual-e5-small', local_dir='embedding-model', allow_patterns=['*.json', '**/*.json', '*.model', '*.safetensors'])"
+
+      - name: Build with PyInstaller
+        run: pyinstaller --noconfirm --clean packaging/loma_core.spec
+
+      - name: Add LICENSE, README, and user guides to the dist folder
+        run: |
+          cp LICENSE.txt "dist/LOMA Core Edition/LICENSE.txt"
+          cp packaging/DIST_README.txt "dist/LOMA Core Edition/README.txt"
+          cp packaging/user_guides/*.docx "dist/LOMA Core Edition/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LOMA-Core-Edition-macOS
+          path: dist/LOMA Core Edition
+          retention-days: 14

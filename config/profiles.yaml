@@ -1,0 +1,7 @@
+# Profile pack index — YAML profile bodies live in profiles/
+directory: profiles
+protected:
+  - base_profile
+builtin:
+  - simple_assistant
+  - general_research

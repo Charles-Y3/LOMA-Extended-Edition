@@ -1,0 +1,49 @@
+LOMA Core Edition
+Copyright (c) 2026. All rights reserved.
+
+============================================================
+LICENSE
+============================================================
+
+This project is provided for personal, non-commercial use only. You're
+welcome to use and modify it for your own purposes; redistribution, resale,
+or commercial use is not permitted without the author's prior permission.
+
+You are permitted to:
+- Use the software for your own personal projects
+- Modify it for your own purposes
+- Share unmodified copies for free, for non-commercial use
+
+The following restrictions apply:
+- Commercial use, resale, or paid distribution is prohibited
+- You may not modify and redistribute the software under another name
+- Paid training, paid installation services, or fee-based services built
+  around this software are not allowed without the author's prior permission
+
+This license applies only to the LOMA Core Edition application and the code
+written by the author. All bundled third-party components remain under
+their own respective open-source licenses (see NOTICE section below and
+requirements.txt) — this file does not alter or supersede those licenses.
+
+============================================================
+ACKNOWLEDGEMENTS
+============================================================
+
+LOMA Core Edition is built on top of the local open-source AI ecosystem.
+Special thanks to the maintainers and communities behind:
+
+- Ollama, for local LLM inference
+- NiceGUI, for the application's UI framework
+- faster-whisper and FunASR/SenseVoice, for local speech-to-text
+- edge-tts, for local text-to-speech
+- The wider open-source community enabling private, offline AI tooling
+
+============================================================
+DISCLAIMER
+============================================================
+
+LOMA Core Edition is an AI-assisted system designed to support your own
+work, not replace your judgment. This software is provided "as is" without
+warranty of any kind. AI-generated results may contain inaccuracies — you
+are responsible for verifying outputs before relying on them. The author
+assumes no liability for decisions made based on this software's outputs.

@@ -1,0 +1,13 @@
+{
+  "active_file": "TaoTermsDatabase_v4_20250811.xlsx",
+  "sheet": "TaoTerms",
+  "term_column": "Terms",
+  "translation_column": "Translation",
+  "tooltip_columns": [
+    "Comments",
+    "Existing Translations",
+    "Translation",
+    "Parts Of Speech"
+  ],
+  "url_template": "https://www.mdbg.net/chinese/dictionary?page=worddict&wdrst=0&wdqb={term}"
+}

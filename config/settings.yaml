@@ -1,0 +1,25 @@
+ollama_base_url: "http://127.0.0.1:11434"
+lmstudio_base_url: "http://localhost:1234"
+connectivity_probe_url: "https://1.1.1.1"
+governor_tight_ram_gb: 8
+# Under this VRAM, offload the LLM before image/audio generation so they don't
+# oversubscribe the GPU (LLM + diffusion/TTS need ~12GB+ to coexist; below that,
+# WDDM pages VRAM over PCIe and media generation crawls).
+governor_tight_vram_gb: 12
+governor_min_available_ram_gb: 4
+settings_file: "data/settings.json"
+intents:
+  - Chat
+  - Multimodal
+  - Report
+  - Apps
+  - Presentation
+theme_default: system
+language_default: en
+active_profile_default: simple_assistant
+upload_dir: data/uploads
+chat_dir: data/chats
+generated_dir: data/generated
+profiles_dir: profiles
+gmail_oauth_client_id: ""
+gmail_oauth_client_secret: ""
