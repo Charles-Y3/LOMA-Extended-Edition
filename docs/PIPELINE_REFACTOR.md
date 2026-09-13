@@ -229,28 +229,39 @@ system by accident.
    into the registry; this also de-risks the KV-rename port to Extended (ledger §A).
 4. **Prerequisite #2** — `ProviderCapabilities` + `loaded_context_length()` on
    `BaseProvider` and both backends + tests. **[DONE, commit 597faee]**
-   Still TODO: remove the `batch_budget.py` cap-down so Model Library ctx is a preference
-   (§1.5); settle the `chat_runner.py` reconcile (ledger §D).
+   Resolved: the `batch_budget.py` "cap-down" is kept as-is — with the governor now
+   raising `num_ctx` transiently at `llm_bridge`, a Model Library value acts exactly as
+   the user asked (a baseline **preference** the governor raises from when needed and
+   that reverts after, since runtime raises never persist). Removing it would wrongly
+   ignore a deliberately-small preference. The `chat_runner.py` reconcile (ledger §D) is
+   settled: **keep Core's** version — its `state.messages` slicing is intentional (handles
+   `stream_base` continuation + live-message/preview mirroring); Extended's `total_text`
+   offers no functional gain and would risk the core streaming path.
 5. `context_governor.py` (CJK estimator + provider-branched planner) **[DONE, 597faee]**
    and wired into `llm_bridge` — raise-only auto-size + one-shot overflow retry + error
    surface **[DONE, commit c0df604]**. Fixes the Formslator Review overflow universally.
    Still TODO: surface multi-pass *execution* + between-pass Stop (#7) for payloads that
    exceed even the ceiling (currently the planner flags multipass; callers that split
    their own payloads — batch_processor — should consult it).
-6. **[REMAINING — invasive, verify in-app]** Migrate explicit budget callers to the
-   governor and delete the old budget modules (`batch_budget`, Formslator
-   `resource_budget`, KV `cpu_budget`, Ludicity `narrative_budget`) — now lower urgency
-   since `llm_bridge` covers every call. Give the Formslator Review consistency pass
-   real chunking (still hard-truncates at 1200 chars — partial coverage, not an error).
-7. **[REMAINING — most value at the Extended port]** Build `grounding.py`. In Core
-   (offline) the source path is already centralized in `context_builder`; the big win is
-   unifying Extended's narrow keyword gating (`grounded_chat`) + web branch, so build the
-   resolver together with the Extended port. Shared "LLM task" helper (#6) as callers converge.
+6. **[PARTIAL]** Formslator Review consistency pass now **windows the whole document**
+   instead of truncating at 1200 chars (governor prevents window overflow).
+   **[DONE, commit 85f30a0]** Deferred (measured, not a mass delete): the old budget
+   modules (`batch_budget`, `resource_budget`, `cpu_budget`, `narrative_budget`) stay as
+   the **chunk-sizing layer beneath** the governor — the governor owns ctx/overflow, they
+   size batch chunks. Full folding of chunk-sizing into the governor is follow-up that
+   needs in-app verification of every batch caller; not worth a blind rewrite now.
+7. **[DONE, commit 85f30a0]** `services/grounding.py` — the single Core resolver
+   (sources-only): `needs_source_grounding()` (NEED) + re-exported retrieval trigger, with
+   the Core=offline / Extended=+web contract documented. Core's selection stays in
+   `context_builder` (already centralized); Extended's copy adds the web branch at the port.
 8. `verify_imports.py` spine-boundary guard (no direct `ollama`/`openai` imports).
-   **[DONE, commit b163ed0]** Still TODO: update `EXTENSION_TEMPLATE.md` /
-   `SERVICE_TEMPLATE.md` to require the spine.
-9. Update the `.spec` hiddenimports/datas for the new modules (`services/persistence`,
-   `services/context_governor`); verify a clean `.exe`.
+   **[DONE, commit b163ed0]** `services/SERVICE_TEMPLATE.md` now documents the spine
+   requirement **[DONE, commit 85f30a0-range]**. (`EXTENSION_TEMPLATE.md` referenced in
+   CLAUDE.md does not exist in Core yet — add the same spine section when it's created.)
+9. **[DONE — no change needed]** The `.spec` bundles the whole `services/` tree as
+   `datas` (line 168) with filesystem-import fallback, so `services/persistence`,
+   `services/context_governor`, `services/grounding` are already included; the
+   graph-reachable ones are also seen by Analysis. Verify a clean `.exe` at the next build.
 10. Port to Extended via the ledger (resolver gains the web branch; apply Core changes
     *into* Extended's feature versions, don't overwrite).
 11. (Later) Complete/LOMA1 folder split → three-way ledger + same spine.

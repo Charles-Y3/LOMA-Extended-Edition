@@ -81,7 +81,7 @@ Formslator is Core-only (Extended swaps it for News Brief):
 |---|---|---|
 | `services/providers/ollama_provider.py` | `_loaded_context_length()` + `_chat_with_resize_guard()` — detects the model's loaded ctx and retries a chat when a resize is needed. **Half-built context-overflow handling Core lacks.** | **RECONCILE into the Context Governor** (§1 of refactor doc), don't copy verbatim — it's the provider-level piece of the governor's ladder. HIGH priority; do as part of governor build. |
 | `services/web_fetch.py` | `final_url` = `page.url` after redirect, so citations point at the real article not the redirect. | E→C, low priority (only matters when Core fetches a pasted link). Safe to port. |
-| `pipeline/capability_runtime/chat_runner.py` | Accumulates streamed text via a local `total_text` instead of slicing `state.messages`. Cleaner, avoids depending on message mutation. | **RECONCILE** — behavioral; confirm Core's slicing wasn't intentional (append-to-existing-assistant-message case) before adopting. |
+| `pipeline/capability_runtime/chat_runner.py` | Accumulates streamed text via a local `total_text` instead of slicing `state.messages`. | **RESOLVED — keep Core.** Core's slicing is intentional: it tracks position in the live assistant message to handle `stream_base` continuation + preview mirroring. Extended's `total_text` is no functional gain and would risk the core streaming path. Stays edition-divergent. |
 | `services/resources/policies.py` | `MEDIA_KEEPALIVE_SECONDS` constant. | Tied to Extended's media keepalive (EDITION-EXT). Only port if the reentrant-media-lock improvement is taken. Low priority. |
 
 ---
@@ -118,6 +118,21 @@ session/settings, plugins/*}.py`, `services/image_*`, `ui/**`.
 `data/`, `build/`, `dist/`, `*.pyc`.
 
 ---
+
+## F2. New shared-spine modules to port Core → Extended (at the Extended port)
+
+Built in Core this refactor; port to Extended (adapting the noted edition differences):
+- `services/persistence/` (migration framework) — port as-is. Register Extended's own
+  store migrations (esp. the deferred `document_intelligence`→`knowledge_vault` rename, §A).
+- `services/providers/` `ProviderCapabilities` + `loaded_context_length()` — port as-is;
+  reconcile with Extended's existing `_chat_with_resize_guard` (§D) into the governor path.
+- `services/context_governor.py` + its `llm_bridge` wiring — port as-is (budget modules
+  are identical across editions, §G).
+- `services/grounding.py` — port, then **add the web-search branch** (Extended is online):
+  a live-fact NEED classifier + `services/grounded_chat.py` search, inserted before
+  `model_knowledge` in `source_priority()`. This is the one real edition difference.
+- `scripts/verify_imports.py` spine-boundary check — port as-is.
+- `services/SERVICE_TEMPLATE.md` spine section — port as-is.
 
 ## G. Provider-level note for the refactor
 
