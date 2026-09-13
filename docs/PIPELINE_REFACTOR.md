@@ -220,29 +220,41 @@ system by accident.
 
 ## 5. Order of work (one step per cycle, per CLAUDE.md)
 
-1. Ledger + Extended git baseline — no code changes. **[done 2026-09-13]**
-2. Design review sign-off (this doc, incl. §0.5).
-3. **Prerequisite #1** — migration & versioning framework: version stamp + one migrations
-   registry; fold the existing ad-hoc migrations (`_migrate_legacy_root`,
+1. Ledger + Extended git baseline — no code changes. **[DONE 2026-09-13, commit 1cedd53/e6dcd17]**
+2. Design review sign-off (this doc, incl. §0.5). **[DONE]**
+3. **Prerequisite #1** — migration & versioning framework: `services/persistence/`
+   (version stamp + migrations registry) + tests. **[DONE, commit 597faee]**
+   Still TODO: fold the existing ad-hoc migrations (`_migrate_legacy_root`,
    `_migrate_renamed_extension_root`, `_migrate_extension_id`, `migrate_discontinued_models`)
-   into it. This also de-risks the deferred KV-rename port to Extended (ledger §A).
-4. **Prerequisite #2** — provider capability descriptor on `BaseProvider`; reconcile
-   Extended's `ollama_provider` resize guard (ledger §D) into it; remove the
-   `batch_budget.py` cap-down so Model Library ctx is a preference (§1.5). Settle the
-   `chat_runner.py` reconcile (ledger §D) here while in the call path.
-5. Build `context_governor.py` in Core (with error surface #5 + cancellation #7), on top
-   of #2.
-6. Migrate callers worst-first: **Formslator Review** → translate/format engines → KV →
-   chat `context_builder` → Data Studio. Delete old budget modules as they empty.
-7. Build `grounding.py` in Core; migrate the same callers. Introduce the shared "LLM task"
-   helper (#6) as these callers converge.
+   into the registry; this also de-risks the KV-rename port to Extended (ledger §A).
+4. **Prerequisite #2** — `ProviderCapabilities` + `loaded_context_length()` on
+   `BaseProvider` and both backends + tests. **[DONE, commit 597faee]**
+   Still TODO: remove the `batch_budget.py` cap-down so Model Library ctx is a preference
+   (§1.5); settle the `chat_runner.py` reconcile (ledger §D).
+5. `context_governor.py` (CJK estimator + provider-branched planner) **[DONE, 597faee]**
+   and wired into `llm_bridge` — raise-only auto-size + one-shot overflow retry + error
+   surface **[DONE, commit c0df604]**. Fixes the Formslator Review overflow universally.
+   Still TODO: surface multi-pass *execution* + between-pass Stop (#7) for payloads that
+   exceed even the ceiling (currently the planner flags multipass; callers that split
+   their own payloads — batch_processor — should consult it).
+6. Migrate explicit budget callers to the governor and delete the old budget modules
+   (`batch_budget`, Formslator `resource_budget`, KV `cpu_budget`, Ludicity
+   `narrative_budget`) — now lower urgency since `llm_bridge` covers every call. The
+   Formslator Review consistency pass still hard-truncates at 1200 chars (partial
+   coverage, not an error) — give it real chunking here.
+7. Build `grounding.py` in Core (sources-only); migrate callers. Shared "LLM task"
+   helper (#6) as they converge.
 8. Add the `verify_imports.py` guard + update `EXTENSION_TEMPLATE.md` /
    `SERVICE_TEMPLATE.md` so new surfaces must use the spine.
-9. Update the `.spec` hiddenimports/datas for the new modules; verify a clean `.exe`
-   (per the PyInstaller done-criterion).
+9. Update the `.spec` hiddenimports/datas for the new modules (`services/persistence`,
+   `services/context_governor`); verify a clean `.exe`.
 10. Port to Extended via the ledger (resolver gains the web branch; apply Core changes
     *into* Extended's feature versions, don't overwrite).
 11. (Later) Complete/LOMA1 folder split → three-way ledger + same spine.
+
+**Known stray:** `tests/test_history_events.py` imports `extensions.history_events`
+(Extended-only) and errors on Core collection — pre-existing, not in Core's feature set;
+remove from Core or guard-skip.
 
 ---
 
