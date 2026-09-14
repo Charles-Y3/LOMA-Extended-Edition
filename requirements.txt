@@ -36,14 +36,14 @@ imageio-ffmpeg>=0.5.0
 # _to_simplified — Piper's zh_CN voice only phonemizes Simplified characters correctly).
 opencc-python-reimplemented>=0.1.7
 
-# Document Intelligence (BM25 lexical search, encrypted Office files)
+# Knowledge Vault (BM25 lexical search, encrypted Office files)
 msoffcrypto-tool>=5.0.0
 # Legacy .doc -> .docx conversion via Word COM automation (needs Microsoft Word installed)
 pywin32>=306; sys_platform == "win32"
 
-# Deep document search (RAG) — Document Intelligence's Deep search mode. Bundled
+# Deep document search (RAG) — Knowledge Vault's Deep search mode. Bundled
 # unconditionally (not "optional add-on" style) so all 4 of Core Edition's bundled
-# extensions (document_editor, chat_archive_manager, formslator, document_intelligence)
+# extensions (document_editor, chat_archive_manager, formslator, knowledge_vault)
 # work out of the box with no first-run download.
 chromadb>=0.5.0
 langchain-chroma>=0.2.0

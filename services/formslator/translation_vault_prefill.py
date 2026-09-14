@@ -8,7 +8,7 @@ from typing import Callable
 from docx import Document
 from docx.shared import RGBColor
 
-from extensions.document_intelligence.translation import translation_index_for_scope
+from extensions.knowledge_vault.translation import translation_index_for_scope
 from services.formslator.format_engine import column_indices
 from services.formslator.translate_engine import (
     clean_basic_grammar,

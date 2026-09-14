@@ -6,12 +6,41 @@ from nicegui import ui
 
 import config
 from pipeline.i18n import normalize_locale
+from services.persistence import migrate, register, stamp
 from services.session import state
+
+# Persistence spine (docs/PIPELINE_REFACTOR.md §0.5 #1). v1 folds in the Document
+# Intelligence → Knowledge Vault rename: an existing Extended settings.json lists the
+# extension under its old id in installed/disabled_extensions, so remap it (matching the
+# extension-folder rename) or the extension's enabled state is silently lost.
+_SETTINGS_STORE = "settings"
+
+
+def _settings_v1(data: dict) -> dict:
+    for key in ("installed_extensions", "disabled_extensions"):
+        ids = data.get(key)
+        if isinstance(ids, list):
+            data[key] = [
+                "knowledge_vault" if str(i) == "document_intelligence" else i for i in ids
+            ]
+    for old, new in (
+        ("highlight_use_di", "highlight_use_kv"),
+        ("highlight_di_mode", "highlight_kv_mode"),
+        ("highlight_di_scope", "highlight_kv_scope"),
+        ("highlight_di_library_id", "highlight_kv_library_id"),
+    ):
+        if new not in data and old in data:
+            data[new] = data[old]
+    return data
+
+
+register(_SETTINGS_STORE, 1, _settings_v1)
 
 
 def save_settings(data: dict, *, quiet: bool = False) -> None:
     if "language" in data:
         data["language"] = normalize_locale(data.get("language"))
+    stamp(_SETTINGS_STORE, data)
     path = state.SETTINGS_FILE
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     try:
@@ -30,7 +59,7 @@ def save_settings(data: dict, *, quiet: bool = False) -> None:
 _DEFAULT_ENABLED_EXTENSIONS = frozenset({
     "chat_archive_manager",
     "document_editor",
-    "document_intelligence",
+    "knowledge_vault",
     "token_tracker",
     "web_viewer",
     "history_events",
@@ -115,6 +144,8 @@ def load_settings() -> dict:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
+            # Run the central migration chain (DI → KV rename) before reading the blob.
+            loaded = migrate(_SETTINGS_STORE, loaded)
             if "assignments" in loaded:
                 defaults["assignments"].update(loaded["assignments"])
             from services.model_assignments import normalize_role_assignments

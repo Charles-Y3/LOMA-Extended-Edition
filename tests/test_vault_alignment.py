@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from extensions.document_intelligence.translation import TranslationIndex, TranslationPair
+from extensions.knowledge_vault.translation import TranslationIndex, TranslationPair
 from services.formslator.vault_alignment import (
     get_precise_pair,
     is_obviously_wrong,

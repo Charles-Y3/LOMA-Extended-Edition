@@ -86,7 +86,7 @@ async def build_ui() -> None:
     # password prompt raised by background indexing after the user switched away (or
     # before ever opening that panel) had no live poller and just hung until the
     # 10-minute wait in passwords.request_password_dialog() gave up silently.
-    from extensions.document_intelligence.passwords import poll_password_dialog
+    from extensions.knowledge_vault.passwords import poll_password_dialog
 
     ui.timer(0.3, poll_password_dialog)
 

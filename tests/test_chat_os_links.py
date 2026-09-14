@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from extensions.document_intelligence.ui.path_links import format_file_path_links
+from extensions.knowledge_vault.ui.path_links import format_file_path_links
 from ui.components.chat_message import _legacy_loma_open_to_html
 
 

@@ -100,7 +100,7 @@ extensions/<extension_id>/
     extension.py    # class inheriting BaseExtension with mount(container)
 ```
 
-Examples: `document_intelligence`, `formslator`, `profile_manager`,
+Examples: `knowledge_vault`, `formslator`, `profile_manager`,
 `chat_archive_manager`, `history_events`
 
 > **Rule:** Extensions call services. They must not contain chat workflow orchestration
@@ -295,7 +295,7 @@ leave plan/delivery UI until the user responds.
 
 | Extension | Role |
 |---|---|
-| `document_intelligence` | catalogue, index, Ask/Analyze |
+| `knowledge_vault` | catalogue, index, Ask/Analyze |
 | `formslator` | format, translate, glossary, vault prefill |
 | `history_events` | scenarios, grading |
 | `profile_manager` | profiles |

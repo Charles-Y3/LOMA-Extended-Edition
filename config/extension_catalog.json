@@ -17,9 +17,9 @@
       "version": "0.1.0"
     },
     {
-      "id": "document_intelligence",
-      "title": "Document Intelligence",
-      "description": "Workspace and library document tasks — Search, Ask, Analyze with Fast, Deep, and Agent reasoning.",
+      "id": "knowledge_vault",
+      "title": "Knowledge Vault",
+      "description": "Workspace and library document tasks — Search, Ask, Analyze, Deep, and Agentic reasoning, plus a Translation Vault to manage bilingual pairs.",
       "category": "productivity",
       "bundled": true,
       "version": "0.1.0"

@@ -446,7 +446,7 @@ def run_translate_job(
 
     vault_index = None
     if use_vault_prefill:
-        from extensions.document_intelligence.translation import translation_index_for_scope
+        from extensions.knowledge_vault.translation import translation_index_for_scope
 
         vault_index = translation_index_for_scope(
             vault_scope or "all",

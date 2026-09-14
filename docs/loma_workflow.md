@@ -193,7 +193,7 @@ Extensions **do not** go through `run_workflow` when the user only uses the exte
 
 | Extension | Typical flow |
 |-----------|----------------|
-| `document_intelligence` | Catalogue ingest → lexical/semantic index → Ask / Analyze |
+| `knowledge_vault` | Catalogue ingest → lexical/semantic index → Ask / Analyze |
 | `formslator` | Format / translate DOCX, style mapping, glossary, translation vault |
 | `history_events` | Scenario load → answer → grade |
 | `profile_manager`, `chat_archive_manager` | Config and archives |

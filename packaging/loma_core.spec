@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — bundles everything Core Edition's 4 shipped extensions
-(document_editor, chat_archive_manager, formslator, document_intelligence) need to work
-with zero first-run downloads, including Document Intelligence's RAG stack (chromadb,
+(document_editor, chat_archive_manager, formslator, knowledge_vault) need to work
+with zero first-run downloads, including Knowledge Vault's RAG stack (chromadb,
 langchain, sentence-transformers, torch — see requirements.txt). Only genuinely
 image-generation-specific packages (diffusers, accelerate, peft, torchvision, torchaudio)
 stay excluded, since Core Edition ships no image-output extension (Artwork Studio isn't in
@@ -141,7 +141,7 @@ datas = [
     (_nicegui_dir, 'nicegui'),
     (str(_PROJECT_ROOT / 'config'), 'config'),
     # Local copy of intfloat/multilingual-e5-small (~470MB) — the embedding model behind
-    # Document Intelligence's Semantic enhancement, Deep search, and the chat intent
+    # Knowledge Vault's Semantic enhancement, Deep search, and the chat intent
     # classifier (services/rag_embeddings.py, pipeline/intent_embeddings.py). Without this,
     # resolve_e5_model_path() falls back to a bare HF Hub id and the first embed call blocks
     # on a live multi-hundred-MB-to-multi-GB download with no timeout — reproduced as a
@@ -221,7 +221,7 @@ datas += copy_metadata('sentence-transformers', recursive=True)
 # requirements.txt: NOT installed into the thin build, but the in-app installers
 # (ui/components/asset_downloader.py, capability_installer.py) read it by relative path
 # via services.platform_paths.resource_root() to `pip install -r requirements.txt` as a
-# recovery/reinstall path (image generation, RAG, Document Intelligence deps all live
+# recovery/reinstall path (image generation, RAG, Knowledge Vault deps all live
 # there now). Without bundling the file itself, every "Optional add-ons" button in a
 # packaged build points at a path that doesn't exist.
 _req_path = _PROJECT_ROOT / 'requirements.txt'
@@ -289,7 +289,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports += collect_submodules('pip')
 
-# Document Intelligence's on-demand-install dependencies (lexical + encrypted-office core,
+# Knowledge Vault's on-demand-install dependencies (lexical + encrypted-office core,
 # plus its Deep search RAG stack) are bundled unconditionally now — see requirements.txt —
 # so the extension "just works" out of the box instead of needing a first-run download.
 # rank_bm25/msoffcrypto are only ever imported lazily inside functions (pipeline/gap_handler.py
@@ -303,8 +303,8 @@ hiddenimports += [
 # tiktoken discovers its encoding plugins (tiktoken_ext.openai_public) by scanning the
 # tiktoken_ext namespace package's __path__ with pkgutil.iter_modules — a dynamic scan
 # PyInstaller's static import graph can't follow. Without this, get_encoding() finds zero
-# plugins in the frozen exe ("Unknown encoding ...", used by Document Intelligence's
-# chunker in extensions/document_intelligence/extract.py, which now also has a
+# plugins in the frozen exe ("Unknown encoding ...", used by Knowledge Vault's
+# chunker in extensions/knowledge_vault/extract.py, which now also has a
 # non-tiktoken fallback so ingestion never hard-fails on this).
 hiddenimports += [
     'tiktoken_ext',
@@ -356,7 +356,7 @@ hiddenimports += hiddenimports_funasr
 # image-output extension (Artwork Studio isn't in config/extension_catalog.json here), so
 # nothing in this build ever reaches these imports. torchvision/torchaudio are image/audio-
 # generation-specific and excluded for the same reason; plain `torch` and `transformers`
-# stay OUT of this list because Document Intelligence's Deep search (RAG) needs them
+# stay OUT of this list because Knowledge Vault's Deep search (RAG) needs them
 # transitively via sentence-transformers/langchain-huggingface — see requirements.txt.
 #
 # funasr is deliberately NOT in this list anymore — see the collect_all('funasr') note
@@ -377,7 +377,7 @@ excludes = [
 # transcription (already force-included via hiddenimports below, which happened to paper
 # over the exclude), and accelerate is used by transformers/sentence-transformers' own
 # from_pretrained() machinery (transformers/integrations/accelerate.py) for the E5
-# embedding model behind Document Intelligence's Semantic enhancement — excluding it
+# embedding model behind Knowledge Vault's Semantic enhancement — excluding it
 # reproduced as "Semantic enhancement failed: No module named 'accelerate'" the moment a
 # real semantic build was attempted in a packaged .exe (confirmed; the earlier chromadb-
 # only fix wasn't the whole story). Neither belongs in an "image-generation-only" list.

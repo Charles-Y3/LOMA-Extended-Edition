@@ -234,7 +234,7 @@ def _render_style_picker_retry_button(token: str) -> None:
 
 
 def _render_doc_intel_path_buttons(blocks: list[dict[str, str]], *, font_px: int | None = None) -> None:
-    from extensions.document_intelligence.ui.open_path import open_local_path
+    from extensions.knowledge_vault.ui.open_path import open_local_path
 
     if not blocks:
         return
@@ -287,7 +287,7 @@ def _render_message_content(
         # block out and rendering them as one list at the end — each citation's
         # folder/file link then stays right under that citation, not regrouped
         # with every other citation's links.
-        from extensions.document_intelligence.ui.chat_paths import split_content_with_path_blocks
+        from extensions.knowledge_vault.ui.chat_paths import split_content_with_path_blocks
 
         any_text = False
         all_slots: list[tuple[int, str]] = []

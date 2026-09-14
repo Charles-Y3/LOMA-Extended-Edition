@@ -26,13 +26,16 @@ rename produces most of the "only-in" lists (`extensions/knowledge_vault/*` vs
 `extensions/document_intelligence/*`, `tests/test_kv_*` vs `tests/test_doc_intel_*`) and
 import churn inside many shared files (e.g. `rag_embeddings.py` docstrings).
 
-**Action (C→E, DEFERRED, HIGH-RISK):** rename the folder, tests, imports, and extension
-id in Extended to `knowledge_vault`. Extended's `services/session/settings.py` already
-carries a `_migrate_extension_id` mapping `document_intelligence`→`knowledge_vault`, so the
-settings layer is half-migrated. **Pickled index data on disk keys off the old module
-path** — port with a compat shim (see the Knowledge Vault rename incident in memory) or
-existing user vaults silently fail to load. Do this as its own isolated change, not mixed
-with the refactor.
+**STATUS: DONE (2026-09-15, Extended v1.2.0)** — see `docs/KV_RENAME_PLAN.md`. Renamed the
+folder, tests, imports, extension id, catalog, i18n (knowledge_vault.* keys in i18n.py +
+i18n_extensions.py + extension_i18n.py, all 5 locales) to `knowledge_vault`; ported Core's
+KV content (incl. the translation-vault tab) and the updated `document_editor` (added
+`insert_from_chat.py`, removed `revision.py`). **Pickle-compat shim**
+(`extensions/knowledge_vault/_compat_document_intelligence.py`) redirects old
+`extensions.document_intelligence[.*]` imports to the renamed modules so existing users'
+pickled vault indexes load with zero re-index; paired with the AppData dir migration in
+`knowledge_vault/settings.py` and the DI→KV `settings.json` remap wired via the persistence
+framework in `services/session/settings.py`.
 
 ---
 

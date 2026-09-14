@@ -55,9 +55,9 @@ _CATALOG: dict[str, dict[str, dict[str, str]]] = {
             "title": "Arena",
             "description": "Pit LLM personas or models against each other — compete or cooperate.",
         },
-        "document_intelligence": {
-            "title": "Document Intelligence",
-            "description": "Workspace and library document tasks — Search, Ask, Analyze.",
+        "knowledge_vault": {
+            "title": "Knowledge Vault",
+            "description": "Workspace and library document tasks — Search, Ask, Analyze, Deep, and Agentic reasoning, plus a Translation Vault to manage bilingual pairs.",
         },
         "data_studio": {
             "title": "Data Studio",
@@ -117,9 +117,9 @@ _CATALOG: dict[str, dict[str, dict[str, str]]] = {
             "title": "競技場",
             "description": "讓 LLM 角色或模型互相競爭或合作。",
         },
-        "document_intelligence": {
-            "title": "文件智慧",
-            "description": "工作區與資料庫文件任務 — 搜尋、提問、分析。",
+        "knowledge_vault": {
+            "title": "知識庫",
+            "description": "工作區與資料庫文件任務 — 搜尋、提問、分析、深度與代理推理，並提供翻譯庫管理雙語對照。",
         },
         "data_studio": {
             "title": "資料工作室",
@@ -179,9 +179,9 @@ _CATALOG: dict[str, dict[str, dict[str, str]]] = {
             "title": "竞技场",
             "description": "让 LLM 角色或模型互相竞争或合作。",
         },
-        "document_intelligence": {
-            "title": "文档智能",
-            "description": "工作区与库文档任务 — 搜索、提问、分析。",
+        "knowledge_vault": {
+            "title": "知识库",
+            "description": "工作区与库文档任务 — 搜索、提问、分析、深度与代理推理，并提供翻译库管理双语对照。",
         },
         "data_studio": {
             "title": "数据工作室",
@@ -241,9 +241,9 @@ _CATALOG: dict[str, dict[str, dict[str, str]]] = {
             "title": "Arena",
             "description": "Enfrente personajes o modelos de LLM entre sí — compitan o cooperen.",
         },
-        "document_intelligence": {
-            "title": "Inteligencia de documentos",
-            "description": "Tareas de documentos del espacio de trabajo y la biblioteca — Buscar, Preguntar, Analizar.",
+        "knowledge_vault": {
+            "title": "Knowledge Vault",
+            "description": "Tareas de documentos del espacio de trabajo y la biblioteca — Buscar, Preguntar, Analizar, razonamiento Profundo y Agéntico, además de un Translation Vault para gestionar pares bilingües.",
         },
         "data_studio": {
             "title": "Estudio de datos",
@@ -303,9 +303,9 @@ _CATALOG: dict[str, dict[str, dict[str, str]]] = {
             "title": "Arena",
             "description": "Lassen Sie LLM-Personas oder -Modelle gegeneinander antreten — wetteifern oder kooperieren.",
         },
-        "document_intelligence": {
-            "title": "Dokumentintelligenz",
-            "description": "Dokumentaufgaben für Arbeitsbereich und Bibliothek — Suchen, Fragen, Analysieren.",
+        "knowledge_vault": {
+            "title": "Knowledge Vault",
+            "description": "Dokumentaufgaben für Arbeitsbereich und Bibliothek — Suchen, Fragen, Analysieren, Tiefen- und Agentic-Reasoning, plus ein Translation Vault zur Verwaltung zweisprachiger Paare.",
         },
         "data_studio": {
             "title": "Daten-Studio",

@@ -55,6 +55,7 @@ _doc_state = {
     "filepath": "",
     "editor": None,
     "_autosave_timer": None,
+    "save_status_label": None,
     "baseline": None,
     "undo_stack": [],
     "editor_font_px": 12,
@@ -127,6 +128,28 @@ def _flush_editor_to_parsed() -> None:
         _doc_state["parsed"]["content"] = _coerce_ui_value(ed.value)
 
 
+def _set_save_status(status: str) -> None:
+    """Update the persistent save-status label (Saving… / Saved / Save failed) — autosave
+    runs quietly (no toast) so this is the only feedback the user gets that an edit
+    actually landed on disk."""
+    lbl = _doc_state.get("save_status_label")
+    if lbl is None:
+        return
+    text_key = {
+        "saving": "document_editor.save_status_saving",
+        "saved": "document_editor.save_status_saved",
+        "error": "document_editor.save_status_error",
+    }.get(status)
+    color_class = {
+        "saving": "text-gray-400",
+        "saved": "text-green-400",
+        "error": "text-red-400",
+    }.get(status, "text-gray-400")
+    lbl.set_text(tr(text_key) if text_key else "")
+    lbl.classes(replace=f"text-[11px] {color_class}")
+    lbl.set_visibility(bool(text_key))
+
+
 def _save_docx_if_needed(*, quiet: bool = False) -> None:
     path = (_doc_state.get("filepath") or "").strip()
     if not path:
@@ -138,9 +161,11 @@ def _save_docx_if_needed(*, quiet: bool = False) -> None:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(_document_body_text())
             _doc_state["_undo_edit_snapshotted"] = False
+            _set_save_status("saved")
             if not quiet:
                 ui.notify(tr("document_editor.saved", name=os.path.basename(path)), color="positive")
         except Exception as ex:
+            _set_save_status("error")
             ui.notify(tr("document_editor.save_failed", error=ex), color="negative")
         return
     if not ext.endswith(".docx"):
@@ -150,13 +175,16 @@ def _save_docx_if_needed(*, quiet: bool = False) -> None:
     try:
         persist_docx_state(path, _doc_state.get("parsed"))
         _doc_state["_undo_edit_snapshotted"] = False
+        _set_save_status("saved")
         if not quiet:
             ui.notify(tr("document_editor.saved", name=os.path.basename(path)), color="positive")
     except Exception as ex:
+        _set_save_status("error")
         ui.notify(tr("document_editor.save_failed", error=ex), color="negative")
 
 
 def _schedule_autosave() -> None:
+    _set_save_status("saving")
     timer = _doc_state.get("_autosave_timer")
     if timer is not None:
         try:
@@ -301,19 +329,29 @@ def build_document_viewer_panel() -> None:
 
 
 
-        def on_query(sel: str, instruction: str) -> None:
+        def on_query(
+            sel: str,
+            instruction: str,
+            use_kv: bool = False,
+            kv_mode: str = "ask",
+            kv_scope: str = "all",
+            kv_library_id: str | None = None,
+        ) -> None:
 
             source_part = fname or "document"
 
+            # When the query box was left empty, the dialog defaults the query to
+            # the excerpt itself (sel == instruction) — showing it once, quoted,
+            # is enough; appending it again as a trailing "instruction" line just
+            # repeats the same text twice in the chat message.
+            has_real_instruction = instruction.strip() != sel.strip()
+
             query = (
-
                 f"{tr('chat.excerpt_prefix', source=source_part)}\n\n"
-
-                f'"{sel.strip()}"\n\n'
-
-                f"{instruction.strip()}"
-
+                f'"{sel.strip()}"'
             )
+            if has_real_instruction:
+                query += f"\n\n{instruction.strip()}"
 
             from services.session import state
 
@@ -335,29 +373,16 @@ def build_document_viewer_panel() -> None:
 
             schedule_scroll_chat()
 
-            start_document_highlight_workflow(query, instruction)
-
-        ext = os.path.splitext(_doc_state.get("filepath") or "")[1].lower()
-        can_revise = bool(_doc_state.get("edit_mode") and ext == ".docx")
-
-        def on_revise(sel: str, instruction: str) -> None:
-            def _done() -> None:
-                col = content_holder["column"]
-                if col:
-                    _render_document_content(col)
-
-            from extensions.document_editor.revision import start_document_revision
-
-            ui.notify(tr("document_editor.revising"), color="info")
-            start_document_revision(_doc_state, sel, instruction, on_complete=_done)
+            start_document_highlight_workflow(
+                query, instruction,
+                use_kv=use_kv, kv_mode=kv_mode, kv_scope=kv_scope, kv_library_id=kv_library_id,
+            )
 
         open_highlight_dialog(
             tr("document_editor.query_highlighted"),
             highlight,
             on_query=on_query,
             source_label=f"doc_{fname}",
-            revise_allowed=can_revise,
-            on_revise=on_revise if can_revise else None,
         )
 
 
@@ -431,6 +456,7 @@ def build_document_viewer_panel() -> None:
 
 
     def load_file_path(path: str, *, edit_on_load: bool = False) -> None:
+        _set_save_status("")
 
         if not path or not os.path.isfile(path):
 
@@ -507,6 +533,28 @@ def build_document_viewer_panel() -> None:
                 view_mode_lbl = ui.label(tr("document_editor.view")).classes("text-[11px] text-blue-400")
 
                 mode_hint_lbl = ui.label(tr("document_editor.view_hint")).classes("text-xs text-gray-400")
+
+                save_status_lbl = ui.label("").classes("text-[11px] text-gray-400")
+                save_status_lbl.set_visibility(False)
+                _doc_state["save_status_label"] = save_status_lbl
+
+                def _show_file_location() -> None:
+                    path = (_doc_state.get("filepath") or "").strip()
+                    if not path or not os.path.isfile(path):
+                        ui.notify(tr("document_editor.no_document"), color="warning")
+                        return
+                    from services.platform_paths import open_path_in_os
+
+                    try:
+                        open_path_in_os(os.path.dirname(os.path.abspath(path)))
+                    except Exception as ex:
+                        ui.notify(tr("document_editor.show_location_failed", error=ex), color="negative")
+
+                ui.button(icon="folder_open", on_click=_show_file_location).props(
+                    "flat round dense size=sm"
+                ).classes(
+                    "text-gray-400 opacity-80 hover:opacity-100 hover:text-blue-300 shrink-0"
+                ).tooltip(tr("document_editor.show_location_tooltip"))
 
                 def _on_view_edit_change() -> None:
                     view_on = bool(view_edit_switch.value)

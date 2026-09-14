@@ -10,7 +10,11 @@ from pathlib import Path
 def save_docx_markdown(filepath: str, markdown_text: str) -> None:
     from services.artifact_build import build_docx_from_markdown
 
-    build_docx_from_markdown(markdown_text or "", filepath)
+    # Document Editor saves are direct WYSIWYG edits, not AI-generated reports — the user
+    # controls headings/structure themselves, so don't inject a cover page or Word TOC field
+    # (build_docx_from_markdown defaults both to True for the chat-workspace "build a report"
+    # flow in services/artifact_build.py, which should keep that default).
+    build_docx_from_markdown(markdown_text or "", filepath, want_cover=False, want_toc=False)
 
 
 def _text_body(value) -> str:

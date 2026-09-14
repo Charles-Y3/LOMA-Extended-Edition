@@ -7,7 +7,7 @@ BUILTIN_EXTENSION_IDS = frozenset(
     {
         "document_editor",
         "chat_archive_manager",
-        "document_intelligence",
+        "knowledge_vault",
         "research",
         "token_tracker",
         "web_viewer",

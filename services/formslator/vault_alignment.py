@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from extensions.document_intelligence.translation import TranslationIndex, TranslationPair
+    from extensions.knowledge_vault.translation import TranslationIndex, TranslationPair
 
 LogFn = Callable[[str], None]
 
@@ -741,7 +741,7 @@ def resolve_vault_translation(
     *,
     vault_source: str = "",
 ) -> str:
-    from extensions.document_intelligence.translation import TranslationIndex, TranslationPair
+    from extensions.knowledge_vault.translation import TranslationIndex, TranslationPair
 
     vault_src = (vault_source or source).strip()
     vault_tgt = (translation or "").strip()

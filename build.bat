@@ -31,7 +31,7 @@ if errorlevel 1 (
 rem --- Strip dev __pycache__ dirs from extensions/services before bundling — datas entries
 rem     copy those trees verbatim with no filtering, so leftover .pyc caches from local dev
 rem     runs otherwise ship too (pure bloat, never needed: Python recompiles at import time
-rem     regardless). Document Intelligence's deep nesting (extensions\document_intelligence\
+rem     regardless). Knowledge Vault's deep nesting (extensions\knowledge_vault\
 rem     retrieval\__pycache__\...) pushed some cached paths past 170 characters even from
 rem     this repo's own location — combined with a longer install path on another machine,
 rem     that's enough to exceed Windows' 260-char MAX_PATH during zip extraction and silently
