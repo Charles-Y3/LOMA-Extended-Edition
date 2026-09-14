@@ -19,6 +19,28 @@ class ProviderInfo:
     error_hint: str = ""
 
 
+@dataclass
+class ProviderCapabilities:
+    """What a backend can actually do, so callers — above all the Context Governor
+    (docs/PIPELINE_REFACTOR.md §0.5 #2) — branch on real capability instead of
+    guessing per provider. Defaults describe the Ollama reference backend; a provider
+    overrides only what differs (e.g. LM Studio can't set context per request).
+
+    - can_set_ctx: num_ctx is settable per request. When False, the governor cannot
+      widen the window — it must fit the work to the already-loaded ctx (shrink +
+      multi-pass) and rely on the error surface if even that won't fit.
+    - reports_loaded_ctx: loaded_context_length() can return a real number (lets the
+      governor know the hard ceiling up front rather than discovering it on failure).
+    - supports_keep_alive / supports_think_param: the Ollama-only `keep_alive` /
+      `think` kwargs are honored rather than silently dropped.
+    """
+
+    can_set_ctx: bool = True
+    reports_loaded_ctx: bool = False
+    supports_keep_alive: bool = True
+    supports_think_param: bool = True
+
+
 class BaseProvider(ABC):
     provider_id: str = ""
     label: str = ""
@@ -51,6 +73,17 @@ class BaseProvider(ABC):
     @abstractmethod
     def unload_all(self) -> list[str]:
         """Release loaded models from VRAM; returns unloaded model names."""
+
+    def capabilities(self) -> ProviderCapabilities:
+        """What this backend can do. Default = Ollama-reference (full capability);
+        providers override only what differs."""
+        return ProviderCapabilities()
+
+    def loaded_context_length(self, model: str) -> int | None:
+        """The model's currently-loaded context window in tokens, if the backend
+        exposes it; None when unknown. Lets the governor know the hard ceiling before
+        sending rather than discovering it from a failed request."""
+        return None
 
     @property
     @abstractmethod

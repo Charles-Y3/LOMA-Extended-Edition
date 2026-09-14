@@ -3,47 +3,18 @@
 from __future__ import annotations
 
 import logging
-import threading
 from typing import Any, Iterator
 
 import ollama
 
 import config
-from services.providers.base import BaseProvider, ProviderInfo
+from services.providers.base import BaseProvider, ProviderCapabilities, ProviderInfo
 
 logger = logging.getLogger(__name__)
 
 _PROBE_TIMEOUT = 10.0
 _PULL_TIMEOUT = 3600.0
 _CHAT_TIMEOUT = 600.0
-
-# A chat call whose requested num_ctx differs from what Ollama currently has
-# the model loaded at forces a reload with a bigger KV-cache. On a
-# VRAM-constrained GPU that reload can stall for a very long time with zero
-# visible progress (this is what previously looked like LOMA just hanging).
-# Give it this long before assuming it's stuck and falling back to a call
-# sized to fit the context that's ALREADY loaded, which needs no reload.
-_RESIZE_STALL_TIMEOUT = 90.0
-
-
-def _loaded_context_length(client: "ollama.Client", model: str) -> int | None:
-    """Currently loaded context window for `model`, per Ollama's own /api/ps,
-    or None if it isn't loaded (or can't be determined) — a cheap, local
-    call, safe to make before any chat request that specifies num_ctx."""
-    try:
-        ps = client.ps()
-    except Exception:
-        return None
-    for entry in ps.get("models", []) if isinstance(ps, dict) else []:
-        name = str(entry.get("name") or entry.get("model") or "")
-        if name == model or name.split(":")[0] == model.split(":")[0]:
-            ctx = entry.get("context_length")
-            if ctx:
-                try:
-                    return int(ctx)
-                except (TypeError, ValueError):
-                    return None
-    return None
 
 
 def _is_sequence_batch_error(exc: BaseException) -> bool:
@@ -98,6 +69,44 @@ class OllamaProvider(BaseProvider):
     def base_url(self) -> str:
         return self._base_url
 
+    def capabilities(self) -> ProviderCapabilities:
+        # Ollama honors num_ctx/keep_alive/think per request and exposes a model's
+        # trained context length via show() — full capability.
+        return ProviderCapabilities(
+            can_set_ctx=True,
+            reports_loaded_ctx=True,
+            supports_keep_alive=True,
+            supports_think_param=True,
+        )
+
+    def loaded_context_length(self, model: str) -> int | None:
+        """Best-effort: the model's trained context length from Ollama's show().
+        Ollama keys it per-architecture (e.g. "qwen2.context_length"), so scan for
+        any *.context_length / context_length entry. None on any failure — the
+        governor then falls back to its hardware estimate."""
+        if not model:
+            return None
+        try:
+            info = self._client.show(model)
+        except Exception as exc:
+            logger.debug("Ollama show(%s) failed: %s", model, exc)
+            return None
+        model_info = {}
+        if isinstance(info, dict):
+            model_info = info.get("modelinfo") or info.get("model_info") or {}
+        else:
+            model_info = getattr(info, "modelinfo", None) or getattr(info, "model_info", None) or {}
+        if isinstance(model_info, dict):
+            for key, val in model_info.items():
+                if str(key).endswith("context_length"):
+                    try:
+                        n = int(val)
+                        if n > 0:
+                            return n
+                    except (TypeError, ValueError):
+                        continue
+        return None
+
     def probe(self) -> ProviderInfo:
         from pipeline.i18n import t as tr
 
@@ -151,83 +160,6 @@ class OllamaProvider(BaseProvider):
         client = ollama.Client(host=self._base_url, timeout=120.0)
         client.delete(model_name)
 
-    def _chat_with_resize_guard(self, client: "ollama.Client", attempt: dict[str, Any]) -> Any:
-        """Run one chat attempt, guarding against a stalled context-size reload.
-
-        If `attempt` asks for a num_ctx different from what's currently
-        loaded, Ollama has to reload the model before it can answer. On a
-        VRAM-tight machine that reload can stall indefinitely with no
-        feedback. This lets it run for _RESIZE_STALL_TIMEOUT seconds; if it
-        hasn't returned by then, it fires off a retry sized to fit the
-        context that's ALREADY loaded (no reload needed) and returns
-        whichever finishes first. The original call is abandoned on its
-        daemon thread rather than killed (Python can't interrupt a network
-        call) — same abandon-don't-kill pattern as
-        services.session.workflow_control.run_cancellable."""
-        options = attempt.get("options") or {}
-        requested_ctx = options.get("num_ctx")
-        model = str(attempt.get("model") or "")
-        if not requested_ctx or not model:
-            return client.chat(**attempt)
-
-        loaded_ctx = _loaded_context_length(client, model)
-        if not loaded_ctx or loaded_ctx == requested_ctx:
-            return client.chat(**attempt)
-
-        try:
-            from services.session import state
-
-            state.add_log(
-                f"Ollama is switching model context size ({loaded_ctx} -> "
-                f"{requested_ctx}) — this can take a while on limited VRAM..."
-            )
-        except Exception:
-            pass
-
-        result_box: dict[str, Any] = {}
-        error_box: dict[str, BaseException] = {}
-
-        def _run() -> None:
-            try:
-                result_box["value"] = client.chat(**attempt)
-            except Exception as exc:
-                error_box["value"] = exc
-
-        thread = threading.Thread(target=_run, daemon=True)
-        thread.start()
-        thread.join(_RESIZE_STALL_TIMEOUT)
-
-        if thread.is_alive():
-            try:
-                from services.session import state
-
-                state.add_log(
-                    "Context resize is taking unusually long (likely low GPU "
-                    f"memory); retrying at the already-loaded context size "
-                    f"({loaded_ctx}) instead of waiting further..."
-                )
-            except Exception:
-                pass
-            fallback = dict(attempt)
-            fallback_opts = dict(options)
-            fallback_opts["num_ctx"] = loaded_ctx
-            num_predict = fallback_opts.get("num_predict")
-            if isinstance(num_predict, int) and num_predict > loaded_ctx - 512:
-                fallback_opts["num_predict"] = max(256, loaded_ctx - 512)
-            fallback["options"] = fallback_opts
-            try:
-                return client.chat(**fallback)
-            except Exception as exc:
-                raise RuntimeError(
-                    "context_resize_stalled: model context resize did not "
-                    "complete in time and the fallback at the smaller, "
-                    "already-loaded context also failed"
-                ) from exc
-
-        if "value" in result_box:
-            return result_box["value"]
-        raise error_box.get("value") or RuntimeError("Ollama chat failed with no result")
-
     def chat(self, **kwargs: Any) -> Any:
         from services.vision_input import (
             downscale_images_in_messages,
@@ -241,7 +173,7 @@ class OllamaProvider(BaseProvider):
         last_exc: BaseException | None = None
         for idx, attempt in enumerate(variants):
             try:
-                return self._chat_with_resize_guard(client, attempt)
+                return client.chat(**attempt)
             except Exception as exc:
                 last_exc = exc
                 if _is_sequence_batch_error(exc) and idx < len(variants) - 1:

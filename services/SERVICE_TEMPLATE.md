@@ -24,6 +24,28 @@ ServiceDescriptor(
 
 Generated services use `service_registry.register_runtime(id, brief, module)` (see `pipeline/sdlc/registration.py`). Runtime ids must still pass `service_registry.is_valid()` after registration.
 
+## Shared spine (required)
+
+Every service that talks to an LLM MUST go through the shared spine
+(`docs/PIPELINE_REFACTOR.md` §0.5) — never import `ollama`/`openai` or a provider
+adapter directly (`scripts/verify_imports.py` fails the build if you do):
+
+- **Inference** → call `services.llm_bridge.chat()` / `generate()`. This routes every
+  call through the Context Governor, so you do NOT hand-manage `num_ctx` to avoid
+  overflow — the governor sizes the window (CJK-aware), raises it to fit within the
+  machine's ceiling, and retries on overflow. A user-set Model Library `num_ctx` is the
+  floor; the governor only ever raises from it, transiently.
+- **Grounded facts** → decide YES/NO via `services.grounding.needs_source_grounding()`
+  and select evidence through the same path (Core is sources-only; there is no web
+  search). Don't invent a per-service keyword gate.
+- **Persisted state** → version it through `services.persistence` (register a migration,
+  `stamp()` on save, `migrate()` on load) so a future rename can't silently break
+  on-disk data.
+- **Cancellation** → long/multi-step work must honour Stop
+  (`services.session.workflow_control.run_cancellable`, and a between-step check in loops).
+
 ## Validation
 
-Run `python scripts/verify_imports.py` — it checks that every capability’s declared services exist in the service registry.
+Run `python scripts/verify_imports.py` — it checks that every capability’s declared
+services exist in the service registry, and that no module bypasses the spine by
+importing an LLM backend directly.

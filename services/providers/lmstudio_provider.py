@@ -9,7 +9,7 @@ import urllib.request
 from typing import Any, Iterator
 
 import config
-from services.providers.base import BaseProvider, ProviderInfo
+from services.providers.base import BaseProvider, ProviderCapabilities, ProviderInfo
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,18 @@ class LMStudioProvider(BaseProvider):
     @property
     def base_url(self) -> str:
         return self._base_url
+
+    def capabilities(self) -> ProviderCapabilities:
+        # OpenAI-compatible API: no per-request context sizing (window is fixed at
+        # model-load in LM Studio's UI), and keep_alive/think are not honored. The
+        # loaded context size isn't exposed via /v1/models either, so the governor
+        # relies on shrink + multi-pass and the friendly context-exceeded error.
+        return ProviderCapabilities(
+            can_set_ctx=False,
+            reports_loaded_ctx=False,
+            supports_keep_alive=False,
+            supports_think_param=False,
+        )
 
     def _request(self, path: str, *, method: str = "GET", body: dict | None = None, timeout: float = 5) -> Any:
         url = f"{self._base_url}{path}"

@@ -62,18 +62,81 @@ def _apply_think_setting(kwargs: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _govern(kwargs: dict[str, Any], *, text_key: str) -> dict[str, Any]:
+    """Context Governor spine hook (docs/PIPELINE_REFACTOR.md §1): raise num_ctx to
+    fit the prompt+output, within the machine's ceiling, on every call. Raise-only and
+    fully defensive — on any error the caller's kwargs are returned unchanged."""
+    try:
+        from services.context_governor import _messages_text, govern_options
+
+        model = str(kwargs.get("model") or "")
+        if text_key == "messages":
+            text = _messages_text(kwargs.get("messages"))
+        else:
+            text = str(kwargs.get(text_key) or "")
+        out = dict(kwargs)
+        out["options"] = govern_options(text=text, options=kwargs.get("options"), model=model)
+        return out
+    except Exception:
+        return kwargs
+
+
+def _ctx_ceiling(model: str) -> int:
+    try:
+        from pipeline.direct.batch_budget import resolve_batch_budget
+
+        b = resolve_batch_budget(None, model or "")
+        return int(b.get("num_ctx_raw") or b.get("num_ctx") or 0)
+    except Exception:
+        return 0
+
+
+def _run_with_ctx_retry(fn, *, model: str, call_kwargs: dict[str, Any]) -> Any:
+    """Safety net: if a call overflows context and the backend can resize, retry once
+    with a wider window. The user never sees a raw context-length error on Ollama; on a
+    fixed-window backend the provider already raises a translated, actionable message."""
+    from services.session.workflow_control import run_cancellable
+
+    try:
+        return run_cancellable(fn, **call_kwargs)
+    except Exception as exc:
+        try:
+            from services.context_governor import is_context_overflow_error
+
+            if not is_context_overflow_error(exc):
+                raise
+            opts = dict(call_kwargs.get("options") or {})
+            cur = int(opts.get("num_ctx") or 0)
+            ceiling = _ctx_ceiling(model)
+            bumped = min(max(cur * 2, 8192), ceiling) if ceiling else 0
+            if not (bumped and bumped > cur):
+                raise
+            opts["num_ctx"] = bumped
+            retry = dict(call_kwargs)
+            retry["options"] = opts
+            try:
+                from services.session import state
+
+                state.add_log(
+                    f"Context overflow — retrying with a wider window (num_ctx {cur:,} → {bumped:,})…"
+                )
+            except Exception:
+                pass
+        except Exception:
+            raise exc
+        return run_cancellable(fn, **retry)
+
+
 def chat(**kwargs: Any) -> Any:
     stream = bool(kwargs.get("stream"))
     model = str(kwargs.get("model") or "unknown")
     backend = _backend()
-    call_kwargs = _with_keep_alive(_apply_think_setting(kwargs))
+    call_kwargs = _govern(_with_keep_alive(_apply_think_setting(kwargs)), text_key="messages")
     if stream:
         return _StreamUsageRecorder(backend.chat(**call_kwargs), model=model, operation="chat")
     # Non-streaming calls block until the whole response arrives — Stop must be able to
     # unwind this immediately (e.g. plan-mode orchestration), not just wait it out.
-    from services.session.workflow_control import run_cancellable
-
-    result = run_cancellable(backend.chat, **call_kwargs)
+    result = _run_with_ctx_retry(backend.chat, model=model, call_kwargs=call_kwargs)
     try:
         from services.session.token_usage import record_from_response
 
@@ -87,12 +150,10 @@ def generate(**kwargs: Any) -> Any:
     stream = bool(kwargs.get("stream"))
     model = str(kwargs.get("model") or "unknown")
     backend = _backend()
-    call_kwargs = _with_keep_alive(_apply_think_setting(kwargs))
+    call_kwargs = _govern(_with_keep_alive(_apply_think_setting(kwargs)), text_key="prompt")
     if stream:
         return _StreamUsageRecorder(backend.generate(**call_kwargs), model=model, operation="generate")
-    from services.session.workflow_control import run_cancellable
-
-    result = run_cancellable(backend.generate, **call_kwargs)
+    result = _run_with_ctx_retry(backend.generate, model=model, call_kwargs=call_kwargs)
     try:
         from services.session.token_usage import record_from_response
 

@@ -3,6 +3,7 @@
 """Smoke-import and registry alignment check after service/pipeline upgrades."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -29,6 +30,7 @@ def main() -> int:
         ("service registry", lambda: _check_services()),
         ("roles and contracts registry", lambda: _check_roles_contracts()),
         ("registry integrity", lambda: _check_integrity()),
+        ("spine boundaries", lambda: _check_spine_boundaries()),
     ]
     for name, fn in checks:
         try:
@@ -92,6 +94,61 @@ def _check_integrity() -> None:
     errors = validate_all_registries(extension_registry)
     if errors:
         raise RuntimeError("\n".join(errors))
+
+
+def _check_spine_boundaries() -> None:
+    """Enforce the shared spine (docs/PIPELINE_REFACTOR.md §0.5): no module may import
+    an LLM backend directly — all inference goes through services.llm_bridge, so the
+    Context Governor and provider-capability handling apply to every call. Only the
+    provider adapters themselves and a few backend-management helpers are exempt.
+
+    A name heuristic (module-level `import ollama` / `import openai`), deliberately
+    conservative: it catches a new surface reaching past the spine without flagging
+    legitimate provider code. Add a genuinely new backend-management module to
+    _SPINE_EXEMPT only with a clear reason.
+    """
+    import re
+
+    exempt = {
+        os.path.normpath(p)
+        for p in (
+            "services/providers/ollama_provider.py",
+            "services/providers/lmstudio_provider.py",
+            "services/providers/base.py",
+            "services/providers/registry.py",
+            "services/inference/ollama_chat.py",
+            "config/__init__.py",
+            # Backend-management (model listing/warmup/capability) — Ollama-specific by
+            # nature, not inference calls; tracked as consolidation debt (ledger §8).
+            "services/model_router.py",
+            "services/model_assignments.py",
+            "services/startup_warmup.py",
+        )
+    }
+    skip_dirs = {"venv", "dist", "build", "__pycache__", ".git", "node_modules", ".pytest_cache"}
+    pattern = re.compile(r"^\s*(?:import\s+(?:ollama|openai)\b|from\s+(?:ollama|openai)\b)")
+    offenders: list[str] = []
+    for base, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        for fn in files:
+            if not fn.endswith(".py"):
+                continue
+            full = Path(base) / fn
+            rel = os.path.normpath(str(full.relative_to(ROOT)))
+            if rel in exempt or rel.startswith(os.path.normpath("scripts/")):
+                continue
+            try:
+                text = full.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if pattern.match(line):
+                    offenders.append(f"{rel}:{i}: {line.strip()}")
+    if offenders:
+        raise RuntimeError(
+            "Direct LLM-backend import bypasses the spine (use services.llm_bridge):\n  "
+            + "\n  ".join(offenders)
+        )
 
 
 if __name__ == "__main__":
