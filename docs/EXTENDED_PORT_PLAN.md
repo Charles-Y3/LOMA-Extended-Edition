@@ -1,5 +1,10 @@
 # Extended Edition — spine port plan
 
+**STATUS: COMPLETE** (Extended v1.1.0). Spine + edition-neutral locale fixes ported and
+verified (150 tests + `verify_imports` green). Deferred, not part of this port: the
+`document_intelligence`→`knowledge_vault` rename (ledger §A) and the Extended settings.py
+migration wiring that rides with it; the resize-stall-timeout cross-edition follow-up.
+
 Porting the shared spine + edition-neutral Core fixes (Sept 13–14) into Extended.
 Core is canonical (v1.1.0). Extended starts at v1.0.0. See `SYNC_LEDGER.md` §F2.
 

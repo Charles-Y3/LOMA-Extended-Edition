@@ -24,6 +24,52 @@ from pipeline.i18n import SUPPORTED_LOCALES
 # ---------------------------------------------------------------------------
 
 CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
+    "verb_edit_selection": {
+        # Preview panel's "does this request change the highlighted text, or
+        # just ask about it" check (services/session/preview_revision.py) —
+        # an imperative edit verb routes to revise/mutate, anything else
+        # defaults to ask/chat. "summarize"/"explain" are deliberately absent
+        # (see that module's own comment) since for a selection those usually
+        # mean "tell me", not "change this here".
+        "en": (
+            "revise", "edit", "change", "rewrite", "reword", "re-word", "rephrase",
+            "fix", "correct", "replace", "translate", "localize", "localise",
+            "update", "improve", "shorten", "lengthen", "expand", "condense",
+            "simplify", "polish", "adjust", "convert", "reformat", "format",
+            "proofread", "tidy", "capitalize", "capitalise", "bold", "make it",
+            "make this", "turn it into", "turn this into", "clean up",
+        ),
+        "zh_tw": (
+            "修改", "編輯", "改寫", "重寫", "換句話說", "修正", "更正", "取代", "替換",
+            "翻譯", "在地化", "本地化", "更新", "改善", "縮短", "加長", "延長", "擴充",
+            "精簡", "簡化", "潤飾", "潤色", "調整", "轉換", "重新格式化", "格式化",
+            "校對", "整理", "大寫", "粗體", "改成", "變成", "清理",
+        ),
+        "zh_cn": (
+            "修改", "编辑", "改写", "重写", "换句话说", "修正", "更正", "取代", "替换",
+            "翻译", "本地化", "更新", "改善", "缩短", "加长", "延长", "扩充",
+            "精简", "简化", "润饰", "润色", "调整", "转换", "重新格式化", "格式化",
+            "校对", "整理", "大写", "粗体", "改成", "变成", "清理",
+        ),
+        "es": (
+            "revisa", "edita", "cambia", "reescrib", "reformul", "parafrase",
+            "corrig", "corrige", "reemplaza", "sustituye", "traduc", "localiza",
+            "actualiza", "mejora", "acorta", "alarga", "expande", "amplía", "amplia",
+            "condensa", "simplifica", "puli", "ajusta", "convierte", "reformatea",
+            "formatea", "corrige la ortografía", "corrige la ortografia", "ordena",
+            "mayúscula", "mayuscula", "negrita", "conviértelo", "conviertelo",
+            "convierte esto", "limpia",
+        ),
+        "de": (
+            "überarbeit", "ueberarbeit", "bearbeit", "änder", "aender", "umschreib",
+            "umformulier", "paraphrasier", "korrigier", "ersetz", "übersetz",
+            "uebersetz", "lokalisier", "aktualisier", "verbesser", "kürz", "kuerz",
+            "verlänger", "verlaenger", "erweiter", "verdichte", "vereinfach",
+            "poliere", "passe an", "konvertier", "formatiere neu", "formatiere",
+            "korrekturlese", "räum auf", "raeum auf", "großschreib", "grossschreib",
+            "fett", "mach daraus", "verwandel dies",
+        ),
+    },
     "image_deliverable_hints": {
         "en": (
             "generate an image", "create an image", "make an image", "draw me", "draw a",

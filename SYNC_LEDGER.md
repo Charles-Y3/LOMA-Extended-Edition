@@ -121,7 +121,16 @@ session/settings, plugins/*}.py`, `services/image_*`, `ui/**`.
 
 ## F2. New shared-spine modules to port Core → Extended (at the Extended port)
 
-Built in Core this refactor; port to Extended (adapting the noted edition differences):
+**STATUS: PORTED (2026-09-15, Extended v1.1.0)** — see `docs/EXTENDED_PORT_PLAN.md`.
+Spine live in Extended (150 tests + verify_imports green). Also ported: the
+edition-neutral locale-detection fixes from Core `17d2a6d` (highlight Q&A / edit-intent /
+context strategy — `verb_edit_selection` concept added to Extended's query_intent_i18n).
+Still deferred: the `document_intelligence`→`knowledge_vault` rename (§A) and its
+settings.py migration wiring; and a **cross-edition follow-up** to add the
+resize-stall-timeout guard (from Extended's old `ollama_provider`) to Core first, then
+re-port — it was dropped from Extended here for edition consistency with Core's governor.
+
+Built in Core this refactor; ported to Extended (adapting the noted edition differences):
 - `services/persistence/` (migration framework) — port as-is. Register Extended's own
   store migrations (esp. the deferred `document_intelligence`→`knowledge_vault` rename, §A).
 - `services/providers/` `ProviderCapabilities` + `loaded_context_length()` — port as-is;

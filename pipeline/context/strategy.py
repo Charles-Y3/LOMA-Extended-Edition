@@ -5,7 +5,16 @@ from __future__ import annotations
 import re
 
 from pipeline.context.types import ContextStrategy, SourceDigest
+from pipeline.query_intent_i18n import matches
 
+# English structural regex kept alongside the multilingual concept phrases in
+# query_intent_i18n (queried via matches() below) — checking English only here
+# meant a non-English query like "比較這五份文件" or "翻譯全文" never tripped
+# any of these branches and silently fell through to a generic fallback
+# strategy instead of the intended map_reduce/per_source one, even though
+# query_intent_i18n already had fully-translated "cross_source_compare" and
+# "per_source" concepts sitting unused. Same bug class as
+# pipeline/direct/highlight_excerpt.py's hardcoded-English detection.
 _TRANSLATE_FULL = re.compile(
     r"\b(translate|translation|localize|localise)\b", re.I
 )
@@ -25,6 +34,22 @@ _MUTATION_HINT = re.compile(
     r"\b(edit|update|change|modify|mutate|translate)\b.*\b(file|pptx|docx|xlsx|slide|document)\b",
     re.I,
 )
+
+
+def _wants_translate_full(q: str) -> bool:
+    return bool(_TRANSLATE_FULL.search(q)) or matches(q, "verb_translate")
+
+
+def _wants_summarize_full(q: str) -> bool:
+    return bool(_SUMMARIZE_FULL.search(q)) or matches(q, "verb_summarize")
+
+
+def _wants_cross_source_compare(q: str) -> bool:
+    return bool(_CROSS_SOURCE_COMPARE.search(q)) or matches(q, "cross_source_compare")
+
+
+def _wants_per_source_each(q: str) -> bool:
+    return bool(_PER_SOURCE_EACH.search(q)) or matches(q, "per_source")
 
 
 _TRANSLATE_MIN_MAP_REDUCE = 2_500
@@ -49,17 +74,17 @@ def resolve_context_strategy(
     if total_chars <= usable and n_sources <= 2:
         return "fit"
 
-    if n_sources >= 2 and _PER_SOURCE_EACH.search(q):
+    if n_sources >= 2 and _wants_per_source_each(q):
         return "per_source"
 
     # Comparison/synthesis words ("compare", "contrast", "between these", "synthesize", ...)
     # need every source's FULL text considered together, not per-file isolation — "per_source"
     # would instead hand each step only a preview of every file and process them one at a time,
     # which can neither compare anything nor guarantee every file gets covered.
-    if n_sources >= 2 and _CROSS_SOURCE_COMPARE.search(q):
+    if n_sources >= 2 and _wants_cross_source_compare(q):
         return "map_reduce"
 
-    if _TRANSLATE_FULL.search(q) or _SUMMARIZE_FULL.search(q):
+    if _wants_translate_full(q) or _wants_summarize_full(q):
         if total_chars > _TRANSLATE_MIN_MAP_REDUCE:
             return "map_reduce"
         if total_chars > usable // 2:

@@ -3,26 +3,23 @@
 from __future__ import annotations
 
 import os
-import re
 import threading
+
+from pipeline.query_intent_i18n import matches
 
 # An imperative to change the highlighted text → revise (mutation). Anything else
 # (a question / request for more info) → ask (chat). Default is ask.
-# Verbs that REPLACE the highlighted text. "summarize/explain" are intentionally absent —
-# for a selection they usually mean "tell me" (ask/chat); the user can say "replace with a
-# summary" or "shorten this" for an in-place edit.
-_EDIT_INTENT = re.compile(
-    r"\b(revise|edit|change|rewrite|re-?word|rephrase|fix|correct|replace|translate|"
-    r"localize|localise|update|improve|shorten|lengthen|expand|condense|simplify|"
-    r"polish|adjust|convert|reformat|format|proofread|tidy|"
-    r"capitali[sz]e|bold|make it|make this|turn (?:it|this) into|clean up)\b",
-    re.I,
-)
+# Word list lives in pipeline/query_intent_i18n.py's CONCEPTS
+# ("verb_edit_selection") — see CLAUDE.md section 8: a check on the user's own
+# typed text must go through the shared multilingual concept table, never a
+# hardcoded English-only regex (this used to be exactly that, so a non-English
+# "translate this"/"翻譯這個" selection request silently fell through to
+# ask/chat instead of actually revising the selection).
 
 
 def is_selection_edit_request(query: str) -> bool:
     """True when a preview-selection query asks to change the text (vs. ask about it)."""
-    return bool(_EDIT_INTENT.search(query or ""))
+    return matches(query or "", "verb_edit_selection")
 
 from pipeline.base.profile_pack import default_profile
 from pipeline.base import profile_pack as profile_manager
