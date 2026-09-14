@@ -175,6 +175,92 @@ def _render_formslator_open_links(result_path: str) -> None:
             ).props("flat dense no-caps").classes(link_cls)
 
 
+def _insert_target_excerpt(idx: int) -> str:
+    """The highlighted excerpt this assistant message answers, if this message
+    is eligible to be inserted into the open Document Editor document — i.e. it
+    was triggered from a highlight (the preceding user message carries the
+    localized excerpt-prefix wrapper) and a .docx is currently open in edit mode.
+    Returns "" when not eligible, which callers use as the signal to hide the
+    insert buttons entirely."""
+    if idx <= 0 or idx > len(state.messages):
+        return ""
+    msg = state.messages[idx]
+    if msg.get("kv_mode") == "search":
+        # A Search-mode reply is a ranked list of raw snippets, not prose fit for
+        # splicing into a document — Ask/Analyze/Deep/Agentic stay eligible.
+        return ""
+    prev = state.messages[idx - 1]
+    if prev.get("role") != "user":
+        return ""
+    prev_content = prev.get("content") or ""
+    try:
+        from pipeline.direct.highlight_excerpt import extract_highlight_excerpt, is_highlight_query
+    except Exception:
+        return ""
+    if not is_highlight_query(prev_content):
+        return ""
+    excerpt = extract_highlight_excerpt(prev_content)
+    if not excerpt:
+        return ""
+    try:
+        from extensions.document_editor.insert_from_chat import insert_allowed
+    except Exception:
+        return ""
+    if not insert_allowed():
+        return ""
+    return excerpt
+
+
+def _insert_chat_reply(excerpt: str, content: str, *, summarize: bool) -> None:
+    from pipeline.i18n import t as tr
+
+    try:
+        from extensions.document_editor.insert_from_chat import (
+            insert_allowed,
+            insert_text_below_excerpt,
+            start_insert_summary,
+            strip_citations_for_insert,
+        )
+    except Exception as exc:
+        ui.notify(str(exc)[:200], color="negative")
+        return
+
+    # Re-check here (not just at button-render time): the insert buttons are
+    # computed once per chat render and don't disappear the instant the user
+    # flips Document Editor to View mode, so a stale button click needs its own
+    # clear message instead of falling through to the generic "insert failed".
+    if not insert_allowed():
+        ui.notify(tr("chat.insert_edit_mode_required"), color="warning")
+        return
+
+    cleaned = strip_citations_for_insert(content)
+    if not cleaned:
+        ui.notify(tr("chat.insert_failed"), color="negative")
+        return
+
+    if summarize:
+        ui.notify(tr("chat.insert_summarizing"), color="info")
+
+        def _done(ok: bool) -> None:
+            if ok:
+                ui.notify(tr("chat.insert_done"), color="positive")
+            elif not insert_allowed():
+                ui.notify(tr("chat.insert_edit_mode_required"), color="warning")
+            else:
+                ui.notify(tr("chat.insert_failed"), color="negative")
+
+        start_insert_summary(excerpt, cleaned, on_complete=_done)
+        return
+
+    ok = insert_text_below_excerpt(excerpt, cleaned)
+    if ok:
+        ui.notify(tr("chat.insert_done"), color="positive")
+    elif not insert_allowed():
+        ui.notify(tr("chat.insert_edit_mode_required"), color="warning")
+    else:
+        ui.notify(tr("chat.insert_failed"), color="negative")
+
+
 def _render_artifact_card(artifact_path: str) -> None:
     """Inline card for a generated deliverable — LOMA has no separate output panel."""
     from services.platform_paths import open_path_in_os
@@ -478,6 +564,9 @@ def render_chat() -> None:
                                     font_px=font_px,
                                 )
                     else:
+                        insert_excerpt = (
+                            "" if is_processing else _insert_target_excerpt(idx)
+                        )
                         with ui.row().classes("w-full items-end justify-start gap-1"):
                             with ui.column().classes(f"{bubble_cls} gap-2"):
                                 _render_message_content(
@@ -491,6 +580,23 @@ def render_chat() -> None:
                                 retry_token = msg.get("style_picker_token")
                                 if retry_token and idx == len(state.messages) - 1:
                                     _render_style_picker_retry_button(retry_token)
+                            if insert_excerpt:
+                                ui.button(
+                                    icon="post_add",
+                                    on_click=lambda e=insert_excerpt, c=content: _insert_chat_reply(
+                                        e, c, summarize=False
+                                    ),
+                                ).props(copy_btn_props).classes(copy_btn_cls).tooltip(
+                                    tr("chat.insert_into_document_tooltip")
+                                )
+                                ui.button(
+                                    icon="summarize",
+                                    on_click=lambda e=insert_excerpt, c=content: _insert_chat_reply(
+                                        e, c, summarize=True
+                                    ),
+                                ).props(copy_btn_props).classes(copy_btn_cls).tooltip(
+                                    tr("chat.insert_summary_tooltip")
+                                )
                             ui.button(
                                 icon="content_copy",
                                 on_click=lambda c=content: _copy_message(c),
