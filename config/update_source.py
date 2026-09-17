@@ -8,7 +8,7 @@ returns no updates and the settings toggle has nothing to do.
 from __future__ import annotations
 
 # GitHub "owner/repo". Empty disables update checks.
-UPDATE_REPO = ""
+UPDATE_REPO = "Charles-Y3/LOMA-Extended-Edition"
 
 # Branch the manifest and update files are read from.
 UPDATE_BRANCH = "main"
