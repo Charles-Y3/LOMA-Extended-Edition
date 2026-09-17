@@ -8,6 +8,27 @@ from extensions.knowledge_vault.settings import DEFAULTS, load_settings, save_se
 from extensions.knowledge_vault.ui.constants import setting_tooltips
 from pipeline.i18n import t as tr
 
+# Holds the live document_passwords input while the Settings tab is mounted. A NiceGUI
+# tab panel builds every tab's content once when the extension is first opened and just
+# toggles visibility afterward — this field's value is otherwise a snapshot from that
+# one build, so a password confirmed mid-session (see passwords.remember_password)
+# never showed up here until the whole extension was closed and reopened.
+_pw_field_holder: dict = {"field": None}
+
+
+def refresh_document_passwords_field() -> None:
+    """Push the on-disk document_passwords value into an already-mounted Settings tab.
+    Called from passwords.remember_password() right after it persists a newly-confirmed
+    password, so the field updates live instead of requiring a close/reopen."""
+    field = _pw_field_holder.get("field")
+    if field is None:
+        return
+    try:
+        field.value = str(load_settings().get("document_passwords") or "")
+        field.update()
+    except Exception:
+        pass
+
 
 def render_settings_tab() -> None:
     cfg = load_settings()
@@ -114,6 +135,7 @@ def render_settings_tab() -> None:
             .classes("w-full text-xs")
             .tooltip(tooltips.get("document_passwords", ""))
         )
+        _pw_field_holder["field"] = fields["document_passwords"]
 
         with ui.row().classes("w-full justify-end pt-2 gap-2"):
             def _restore_defaults() -> None:

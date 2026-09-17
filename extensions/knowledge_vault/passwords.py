@@ -48,6 +48,13 @@ def remember_password(file_path: str, password: str) -> None:
             save_settings(cfg)
     except Exception:
         pass
+    else:
+        try:
+            from extensions.knowledge_vault.tabs.settings import refresh_document_passwords_field
+
+            _schedule_on_main(refresh_document_passwords_field)
+        except Exception:
+            pass
 
 
 def cached_password(file_path: str) -> str | None:

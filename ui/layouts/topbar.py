@@ -495,7 +495,46 @@ def build_settings_dialog(on_save_reload, theme_tokens: dict) -> ui.dialog:
 def _build_update_section() -> None:
     from config.app_version import APP_VERSION
 
-    ui.label(t("about.update.version_label").format(version=APP_VERSION)).classes("text-xs mb-2")
+    pending_updates: list = []
+
+    version_label = ui.label(t("about.update.version_label").format(version=APP_VERSION)).classes("text-xs mb-2")
+    status_label = ui.label("").classes("text-xs mb-2")
+    status_label.visible = False
+
+    with ui.dialog() as confirm_dialog, ui.card():
+        ui.label(t("about.update.confirm_title")).classes("text-sm font-semibold mb-2")
+        confirm_list_label = ui.label("").classes("text-xs mb-3")
+
+        def _apply_all() -> None:
+            from services.update.apply import apply_update
+
+            restart_needed = False
+            failures: list[str] = []
+            for upd in pending_updates:
+                ok, message = apply_update(upd.component_type, upd.component_id)
+                if ok:
+                    restart_needed = restart_needed or upd.component_type == "app"
+                else:
+                    failures.append(message)
+
+            confirm_dialog.close()
+            pending_updates.clear()
+            status_label.visible = False
+
+            if failures:
+                ui.notify(t("about.update.apply_failed").format(error="; ".join(failures)), color="warning")
+            else:
+                ui.notify(t("about.update.applied"), color="positive")
+            if restart_needed:
+                ui.notify(t("about.update.restart_required"), color="info")
+
+            from services.update.manifest import local_manifest
+
+            version_label.text = t("about.update.version_label").format(version=local_manifest()["app_version"])
+
+        with ui.row().classes("gap-2 justify-end w-full"):
+            ui.button(t("about.update.cancel"), on_click=confirm_dialog.close).props("outline dense")
+            ui.button(t("about.update.apply"), on_click=_apply_all).props("dense")
 
     def _open_log_file() -> None:
         from services.app_log import open_log_file
@@ -505,7 +544,26 @@ def _build_update_section() -> None:
         except Exception:
             ui.notify(t("settings.open_log_file_failed"), color="warning")
 
+    def _check_now() -> None:
+        from services.update.checker import check_for_updates
+
+        updates = check_for_updates()
+        pending_updates.clear()
+        pending_updates.extend(updates)
+
+        if not updates:
+            status_label.text = t("about.update.none_or_unconfigured")
+            status_label.visible = True
+            return
+
+        names = ", ".join(f"{u.component_id} ({u.local_version} → {u.remote_version})" for u in updates)
+        status_label.text = t("about.update.found").format(list=names)
+        status_label.visible = True
+        confirm_list_label.text = names
+        confirm_dialog.open()
+
     with ui.row().classes("gap-2"):
+        ui.button(t("about.update.check_now"), on_click=_check_now).props("outline dense")
         ui.button(t("settings.open_log_file"), on_click=_open_log_file).props("outline dense")
 
 

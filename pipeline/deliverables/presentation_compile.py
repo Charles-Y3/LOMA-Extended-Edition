@@ -70,23 +70,6 @@ _SLIDE_IMAGE_MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 
-_WANTS_NOTES_RE_EN = re.compile(
-    r"speaker\s*notes?|presenter\s*notes?|notes?\s+for\s+(?:each|every)\s+slide|"
-    r"include\b.{0,20}\bnotes?\b",
-    re.IGNORECASE,
-)
-
-
-class _WantsNotesRE:
-    def search(self, text: str):
-        from pipeline.query_intent_i18n import matches
-
-        return _WANTS_NOTES_RE_EN.search(text or "") or (
-            matches(text or "", "speaker_notes_request") or None
-        )
-
-
-_WANTS_NOTES_RE = _WantsNotesRE()
 
 
 def compile_agentic_presentation(
@@ -163,7 +146,6 @@ def compile_agentic_presentation(
     title_layout = prs.slide_layouts[0]
     content_layout = prs.slide_layouts[1]
     visuals = slide_visuals or []
-    wants_notes = bool(_WANTS_NOTES_RE.search(query or ""))
     notes_repaired = 0
 
     if include_images:
@@ -289,22 +271,6 @@ def compile_agentic_presentation(
             bool(image_desc) or visual_type in ("image", "diagram", "chart", "photo")
         )
 
-        # Structural backstop for the 3 deck styles (see presentation_theme.PRESENTATION_
-        # STYLES / step_executor.PRESENTATION_STYLE_PROMPT_BIAS) — those only *ask* the
-        # planner LLM to pick different layout_hints per style; this guarantees the
-        # visible difference even when the planner ignores that instruction.
-        if wants_image and image_desc:
-            if presentation_style == "bold_editorial" and slide_idx == 0:
-                layout_hint = "background"
-            elif presentation_style == "data_heavy" and layout_hint in (
-                "background", "full-bleed", "hero",
-            ):
-                layout_hint = "right"
-            elif presentation_style == "minimal" and layout_hint in (
-                "background", "full-bleed", "hero",
-            ):
-                layout_hint = "small-image"
-
         is_section_slide = slide_layout_kind == "section"
         is_quote_slide = slide_layout_kind == "quote"
         use_title_layout = (
@@ -312,6 +278,50 @@ def compile_agentic_presentation(
             or is_section_slide
             or is_quote_slide
         )
+
+        # Structural backstop for the 3 deck styles (see presentation_theme.PRESENTATION_
+        # STYLES / step_executor.PRESENTATION_STYLE_PROMPT_BIAS) — those only *ask* the
+        # planner LLM to pick different layout_hints/visual types per style; this
+        # guarantees the visible difference even when the planner ignores that
+        # instruction.
+        bold_variant = None
+        if wants_image and image_desc:
+            if presentation_style == "bold":
+                # Every image slide (not just the title) gets a full-bleed
+                # photo — that's the "modern, picture overlay with words"
+                # identity — but the treatment rotates so it doesn't read as
+                # "always a dark scrim": title/section slides get the classic
+                # full overlay, other content slides alternate between a
+                # bottom-band overlay (more of the photo stays visible) and a
+                # split-hero (half photo, half solid accent panel — no scrim
+                # at all). See bold_variant branches below for the renders.
+                layout_hint = "background"
+                if slide_idx == 0 or is_section_slide:
+                    bold_variant = "overlay-full"
+                elif slide_idx % 2 == 1:
+                    bold_variant = "split-hero"
+                else:
+                    bold_variant = "overlay-band"
+            elif presentation_style == "insight":
+                # Layout follows what the visual actually is, not a fixed
+                # column: a chart/diagram/stat grid needs real width to stay
+                # legible (that was the complaint — charts squeezed into a
+                # 3.9" column are unreadable), while a comparison or a plain
+                # fallback photo still reads fine in the side column.
+                from pipeline.direct.image_intent import classify_image_request
+
+                kind = classify_image_request(image_desc)
+                layout_hint = "wide" if kind in (
+                    "chart", "diagram", "infographic_stat", "infographic_timeline",
+                ) else "right"
+            elif presentation_style == "minimal":
+                # Every image sits in the same side column as the other
+                # styles — a small corner thumbnail read as an afterthought
+                # rather than "minimal" (a real run made it look identical to
+                # a plain content slide with a stray icon). The restraint
+                # comes from sparse bullets/no accent bar, not from shrinking
+                # the image into a corner.
+                layout_hint = "right"
         if is_quote_slide:
             # The quote/stat itself is the big text (goes in the title placeholder's
             # large font); the slide's own title (if any) becomes a small attribution
@@ -339,10 +349,13 @@ def compile_agentic_presentation(
         layout = title_layout if use_title_layout else content_layout
         slide = prs.slides.add_slide(layout)
         _apply_slide_transition(slide, theme)
-        if is_section_slide:
+        if is_section_slide or bold_variant == "split-hero":
             # A section-divider slide is a deliberate visual break between deck
             # sections — a solid accent-colored background (instead of the normal
             # light background) reads as a distinct "chapter marker" at a glance.
+            # A split-hero slide reuses the same solid fill for its text half —
+            # the picture (added below) only covers the other half, so the fill
+            # shows through underneath it.
             _apply_accent_background(slide, theme)
         else:
             _apply_slide_background(slide, theme)
@@ -364,41 +377,70 @@ def compile_agentic_presentation(
         # defaults to rendering those words as image text, which every diffusion model
         # (even FLUX) renders as garbled nonsense at this length. Skipping the image
         # when there's no real description is a better outcome than a garbled one.
-        img_path = (
+        resolved_image_desc = image_desc
+        if bold_variant == "overlay-band" and resolved_image_desc:
+            # The bottom ~39% of this image will sit under a scrim + text band
+            # (see _add_overlay_band_scrim) — nothing else about the prompt
+            # knows that, so a subject the model places low in the frame gets
+            # covered regardless of the scrim's own safety margin. Asking for
+            # upper-frame composition doesn't guarantee compliance, but it's
+            # a real second layer on top of the enlarged scrim, not instead
+            # of it.
+            resolved_image_desc = (
+                f"{resolved_image_desc}, main subject composed in the upper "
+                "two-thirds of the frame, lower third kept clear/open"
+            )
+        img_path, img_sources = (
             _resolve_slide_image(
-                image_desc, slide_idx + 1, query, prof=prof, model=model, log_fn=log_fn,
-                # Passing the deck's own generated markdown as "source_text" here used
-                # to always win as trusted grounding for a chart/infographic marker —
-                # pipeline.base.grounding._source_excerpt() treats ANY non-empty
-                # source_text as real material and returns it immediately, before ever
-                # attempting a web search. For an ungrounded deck that markdown is just
-                # the model's own unverified prose (containing no real numbers — the
-                # numeric-claim scrub above strips those), so a chart marker was being
-                # "grounded" in text that had nothing real to ground on, defeating both
-                # the web-search fallback AND chart_generation.py's own refusal check
-                # (which only tests "is context non-empty", not "is it real data") —
-                # confirmed via a real run that still produced 3 charts with invented
-                # numbers despite that refusal. Only pass it when the deck itself is
-                # actually grounded (attached source or a successful web search).
-                source_text=markdown if presentation_grounded else "",
+                resolved_image_desc, slide_idx + 1, query, prof=prof, model=model, log_fn=log_fn,
+                # NOT the deck's own generated markdown — pipeline.base.grounding.
+                # _source_excerpt() treats ANY non-empty source_text as real material
+                # and returns it immediately, before ever attempting a web search, so
+                # passing the deck's own (possibly unverified) prose here made every
+                # chart/diagram "grounded" in text that was never independently
+                # checked, laundering fabricated numbers as if cited (confirmed via a
+                # real run: a chart cited "grounding" that traced back to nothing but
+                # the deck's own prior sentence). Leaving this empty makes each
+                # slide's chart/diagram run its OWN scoped, credibility- and
+                # relevance-filtered web search (see resolve_generation_context /
+                # gather_grounded_context's topic_relevance path) keyed to that
+                # slide's own image_desc — independent of whether the deck's bullet
+                # text (presentation_grounded, used only for the numeric-claim scrub
+                # above) happened to be grounded.
+                source_text="",
                 settings=settings,
+                # Ground the WEB SEARCH in the slide's own already-written
+                # (already numeric-scrubbed) title/bullets, not the raw image
+                # marker text — see _resolve_slide_image's docstring for why.
+                topic_text=f"{title_text} {' '.join(bullet_points)}".strip(),
             )
             if wants_image and image_desc
-            else None
+            else (None, [])
         )
-        use_side_image = bool(
+        is_overlay_slide = bool(
             img_path
-            and not (
-                use_title_layout
-                and layout_hint in ("background", "full-bleed", "hero", "title")
+            and (
+                bold_variant in ("overlay-full", "overlay-band")
+                or (use_title_layout and layout_hint in ("background", "full-bleed", "hero", "title"))
             )
+        )
+        is_split_hero_slide = bool(img_path and bold_variant == "split-hero")
+        is_wide_slide = bool(img_path and layout_hint == "wide")
+        use_side_image = bool(
+            img_path and not is_overlay_slide and not is_split_hero_slide and not is_wide_slide
         )
         # Side image → reserve a real left text column (width+top+height). Setting
         # only width used to collapse placeholder height to 0 in python-pptx.
         text_col = bool(text_left and use_side_image)
 
-        if use_title_layout and img_path and layout_hint in ("background", "full-bleed", "hero", "title"):
+        if is_overlay_slide:
             _add_background_image(slide, img_path, Inches)
+            if bold_variant == "overlay-band":
+                _add_overlay_band_scrim(slide, Inches)
+            else:
+                _add_overlay_scrim(slide, Inches)
+        elif is_split_hero_slide:
+            _add_slide_image(slide, img_path, Inches, position="half-right", alt_text=(image_desc or title_text))
 
         if slide.shapes.title:
             p = slide.shapes.title.text_frame.paragraphs[0]
@@ -477,31 +519,95 @@ def compile_agentic_presentation(
                     except Exception:
                         pass
 
+        if is_overlay_slide or is_split_hero_slide:
+            # Scrim/solid-accent-panel guarantees contrast against any photo,
+            # but the theme's own (light-background-tuned) title/body colors
+            # would still be unreadable on it — force both to white, same
+            # treatment as section-divider slides above.
+            try:
+                from pptx.dml.color import RGBColor
+
+                if slide.shapes.title:
+                    for run in slide.shapes.title.text_frame.paragraphs[0].runs:
+                        run.font.color.rgb = RGBColor(255, 255, 255)
+                if len(slide.placeholders) > 1:
+                    body_ph = slide.placeholders[1]
+                    if body_ph.has_text_frame:
+                        for para in body_ph.text_frame.paragraphs:
+                            for run in para.runs:
+                                run.font.color.rgb = RGBColor(255, 255, 255)
+            except Exception:
+                pass
+
         if text_col:
             _apply_left_text_column(
                 slide,
                 Inches,
+                Pt,
                 title_layout=use_title_layout,
             )
+        elif is_split_hero_slide:
+            # Same idea as text_col but narrower (fits inside the solid-color
+            # half rather than a 3.9"-image-implied column) and independent
+            # of text_left, since a split-hero's text placement isn't driven
+            # by layout_hint.
+            _apply_left_text_column(
+                slide,
+                Inches,
+                Pt,
+                title_layout=use_title_layout,
+                narrow=True,
+            )
+        elif is_overlay_slide and bold_variant == "overlay-band" and not use_title_layout:
+            _apply_overlay_band_text(slide, Inches, Pt)
 
-        if img_path and not (use_title_layout and layout_hint in ("background", "full-bleed", "hero", "title")):
+        if img_path and not is_overlay_slide and not is_split_hero_slide:
             alt_text = image_desc or title_text
-            if layout_hint in ("small-image", "icon", "thumbnail"):
+            if is_wide_slide:
+                _add_slide_image(slide, img_path, Inches, position="wide", alt_text=alt_text)
+                if not use_title_layout:
+                    _apply_wide_visual_band(slide, Inches, Pt)
+            elif layout_hint in ("small-image", "icon", "thumbnail"):
                 _add_slide_image(slide, img_path, Inches, position="corner", alt_text=alt_text)
             else:
                 _add_slide_image(slide, img_path, Inches, position="right", alt_text=alt_text)
 
-        if wants_notes and not speaker_notes.strip() and not use_title_layout:
+        if img_sources:
+            # Only ever populated when a slide's chart/diagram/photo was
+            # actually grounded in a real web search (see resolve_generation_
+            # context's docstring) — never fabricated, so it's safe to cite
+            # directly in the notes rather than leaving the number/claim
+            # unattributed.
+            ref_text = "; ".join(
+                f"{(s.get('title') or '').strip()} ({(s.get('url') or '').strip()})".strip()
+                if (s.get("title") and s.get("url"))
+                else (s.get("title") or s.get("url") or "").strip()
+                for s in img_sources
+                if (s.get("title") or "").strip() or (s.get("url") or "").strip()
+            )
+            if ref_text:
+                speaker_notes = (
+                    f"{speaker_notes}\n\nImage source: {ref_text}".strip()
+                    if speaker_notes.strip()
+                    else f"Image source: {ref_text}"
+                )
+
+        if not speaker_notes.strip():
+            # Every slide gets speaker notes regardless of style or whether the
+            # user explicitly asked for them — the model doesn't reliably write
+            # a notes line for each slide, so this is a mechanical backstop,
+            # not a gate on user intent.
             from pipeline.deliverables.presentation_deck import _fallback_notes
 
-            speaker_notes = _fallback_notes(title_text, bullet_points)
+            notes_source = bullet_points or ([subtitle_text] if subtitle_text else [])
+            speaker_notes = _fallback_notes(title_text, notes_source)
             notes_repaired += 1
         _apply_slide_notes(slide, speaker_notes)
 
     if notes_repaired and log_fn:
         log_fn(
-            f"Speaker notes were requested but missing for {notes_repaired} slide(s) — "
-            "auto-generated fallback notes."
+            f"Auto-generated fallback speaker notes for {notes_repaired} slide(s) "
+            "without model-authored notes."
         )
 
     prs.save(filepath)
@@ -531,16 +637,29 @@ def _visual_for_slide(slide_number: int, visuals: list[dict]) -> dict:
 def _resolve_slide_image(
     description: str, slide_number: int, query: str,
     *, prof: dict | None = None, model: str | None = None, log_fn=None,
-    source_text: str = "", settings: dict | None = None,
-) -> str | None:
+    source_text: str = "", settings: dict | None = None, topic_text: str = "",
+) -> tuple[str | None, list[dict[str, str]]]:
     """`description` (the slide's own [IMAGE_PROMPT:]/[IMAGE:] text or title) drives
     classification via services.marker_visual.resolve_marker_visual() — a process/
     steps description becomes a real flowchart, a key-facts description becomes a
     stat grid, otherwise a plain diffusion photo (using a slide-context-enriched
-    prompt, same as before this became a shared dispatcher)."""
+    prompt, same as before this became a shared dispatcher). The returned sources
+    list is only ever non-empty when a chart/diagram/infographic was genuinely
+    grounded in a real web search — never populated for a plain photo or an
+    attached-source excerpt (not an online citation) — so it's safe to surface
+    directly as a speaker-note reference.
+
+    `topic_text` (the slide's own title+bullets) drives the web search instead
+    of `description` when given — a marker's own free-text description can
+    invent a framing detail (an extra comparison axis, a qualifier) that isn't
+    in the slide's actual content, which then dominates the search and grounds
+    the visual in something the slide was never about (confirmed via a real
+    run: an image marker invented "vs. traditional emergency vehicles" as a
+    comparison for a slide that was actually about green infrastructure, and
+    the resulting chart ended up about firetrucks)."""
     desc = (description or "").strip()
     if not desc:
-        return None
+        return None, []
     try:
         from services.image_generation import prepare_image_prompt
         from services.marker_visual import resolve_marker_visual
@@ -548,25 +667,29 @@ def _resolve_slide_image(
 
         deps_ok, _ = image_generation_deps_available()
         if not deps_ok:
-            return None
+            return None, []
         photo_prompt = prepare_image_prompt(f"{desc}. Presentation slide visual. {query[:120]}")
         path = os.path.join(GENERATED_DIR, f"slide_{slide_number}_visual.png")
-        result_path = resolve_marker_visual(
+        result_path, sources = resolve_marker_visual(
             desc, output_path=path, prof=prof, model=model, log_fn=log_fn, photo_prompt=photo_prompt,
-            source_text=source_text, settings=settings,
+            source_text=source_text, settings=settings, topic_text=topic_text,
         )
         if result_path and os.path.isfile(result_path):
-            return result_path
+            return result_path, sources
     except Exception:
-        return None
-    return None
+        return None, []
+    return None, []
 
 
-def _apply_left_text_column(slide, Inches, *, title_layout: bool = False) -> None:
-    """Pin body into the left column; content titles span full width (8.8")."""
+def _apply_left_text_column(slide, Inches, Pt, *, title_layout: bool = False, narrow: bool = False) -> None:
+    """Pin body into the left column; content titles span full width (8.8").
+    `narrow=True` (bold style's split-hero) fits inside the left HALF of the
+    slide (image covers the other 5") instead of the 3.9"-side-image-implied
+    column, so text never overlaps the picture."""
     left = Inches(0.55)
-    body_width = Inches(4.7)
-    title_width = Inches(4.7) if title_layout else Inches(8.8)
+    col_width = 4.3 if narrow else 4.7
+    body_width = Inches(col_width)
+    title_width = Inches(col_width) if title_layout else Inches(8.8 if not narrow else col_width)
     try:
         title = slide.shapes.title
         if title is not None:
@@ -596,7 +719,15 @@ def _apply_left_text_column(slide, Inches, *, title_layout: bool = False) -> Non
                 body.width = body_width
                 body.height = Inches(5.0)
             if body.has_text_frame:
-                body.text_frame.word_wrap = True
+                if title_layout:
+                    # Just the (already short-clamped elsewhere) subtitle —
+                    # one line, generous cap, purely defensive.
+                    _cap_body_text_frame(body.text_frame, Pt, max_bullets=1, max_chars=160, font_pt=16)
+                else:
+                    _cap_body_text_frame(
+                        body.text_frame, Pt, max_bullets=4,
+                        max_chars=(80 if narrow else 95), font_pt=(13 if narrow else 14),
+                    )
     except Exception:
         pass
 
@@ -605,6 +736,16 @@ def _add_slide_image(slide, img_path: str, Inches, *, position: str = "right", a
     try:
         if position == "corner":
             shape = slide.shapes.add_picture(img_path, Inches(8.8), Inches(5.8), width=Inches(1.2))
+        elif position == "wide":
+            # Insight style's chart/diagram slot — near-full width so a chart
+            # actually stays legible, unlike the 3.9" side column.
+            shape = slide.shapes.add_picture(
+                img_path, Inches(0.55), Inches(1.55), width=Inches(8.9), height=Inches(4.15)
+            )
+        elif position == "half-right":
+            # Bold style's split-hero — image fills the right half; the left
+            # half shows the slide's own solid accent fill underneath.
+            shape = slide.shapes.add_picture(img_path, Inches(5.0), Inches(0), width=Inches(5.0), height=Inches(7.5))
         else:
             # Right column visual — slightly below title band (top 1.65").
             shape = slide.shapes.add_picture(
@@ -613,6 +754,73 @@ def _add_slide_image(slide, img_path: str, Inches, *, position: str = "right", a
         _set_pptx_picture_alt_text(shape, alt_text)
     except Exception:
         pass
+
+
+_WIDE_BAND_MAX_BULLETS = 3
+_WIDE_BAND_MAX_CHARS = 88
+_WIDE_BAND_FONT_PT = 13
+
+
+def _cap_body_text_frame(text_frame, Pt, *, max_bullets: int, max_chars: int, font_pt: int) -> None:
+    """Shared text-safety net — caps bullet count/length and forces an
+    explicit small font, so a text box can't overflow its slot regardless of
+    renderer, theme body size, or how many/how long the authored bullets
+    are. MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE (set when bullets were first
+    written) is only a PowerPoint-render-time hint — python-pptx doesn't
+    enforce it and not every renderer honors it (confirmed via two separate
+    real overflow/illegible-text reports: Insight's chart caption band, and
+    Bold's split-hero narrow column). Every layout that positions text in a
+    constrained box (not the full default content placeholder) should call
+    this after repositioning, instead of each keeping its own copy — this
+    used to be duplicated per-variant, which is exactly how the narrow
+    split-hero column ended up shipped without the same cap the wide band
+    already had."""
+    try:
+        text_frame.word_wrap = True
+        paragraphs = list(text_frame.paragraphs)
+        for para in paragraphs[max_bullets:]:
+            para._p.getparent().remove(para._p)
+        for para in paragraphs[:max_bullets]:
+            text = "".join(run.text for run in para.runs)
+            if len(text) > max_chars:
+                clipped = text[:max_chars]
+                last_space = clipped.rfind(" ")
+                if last_space > max_chars * 0.6:
+                    clipped = clipped[:last_space]
+                text = clipped.rstrip(" ,.;:") + "…"
+            for run in list(para.runs)[1:]:
+                run._r.getparent().remove(run._r)
+            if para.runs:
+                para.runs[0].text = text
+            elif text:
+                para.add_run().text = text
+            for run in para.runs:
+                run.font.size = Pt(font_pt)
+    except Exception:
+        pass
+
+
+def _apply_wide_visual_band(slide, Inches, Pt) -> None:
+    """Insight style's chart/diagram layout: the visual is the dominant
+    element (near-full width, large), bullets condense into a thin band
+    underneath instead of squeezing into a side column — a real chart needs
+    the horizontal room to stay legible, unlike a plain photo."""
+    try:
+        if len(slide.placeholders) <= 1:
+            return
+        body = slide.placeholders[1]
+        body.left = Inches(0.55)
+        body.top = Inches(5.85)
+        body.width = Inches(8.9)
+        body.height = Inches(1.45)
+        if not body.has_text_frame:
+            return
+    except Exception:
+        return
+    _cap_body_text_frame(
+        body.text_frame, Pt,
+        max_bullets=_WIDE_BAND_MAX_BULLETS, max_chars=_WIDE_BAND_MAX_CHARS, font_pt=_WIDE_BAND_FONT_PT,
+    )
 
 
 def _set_pptx_picture_alt_text(shape, alt_text: str) -> None:
@@ -643,6 +851,91 @@ def _add_background_image(slide, img_path: str, Inches) -> None:
         # the background image never appeared on any slide until this fix.
         slide.shapes._spTree.remove(picture._element)
         slide.shapes._spTree.insert(2, picture._element)
+    except Exception:
+        pass
+
+
+def _add_overlay_scrim(slide, Inches, *, alpha_pct: int = 55) -> None:
+    """Semi-transparent dark panel over a full-bleed background image so white
+    overlay text stays legible regardless of the photo's own colors/brightness.
+    python-pptx has no fill-transparency API — the <a:alpha> child is added via
+    direct XML. Must run right after _add_background_image so it lands just
+    above the picture (index 3) but below the title/body placeholders."""
+    try:
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        from pptx.oxml.ns import qn
+
+        scrim = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(10), Inches(7.5))
+        scrim.fill.solid()
+        scrim.fill.fore_color.rgb = RGBColor(0, 0, 0)
+        scrim.line.fill.background()
+        srgb = scrim.fill.fore_color._xFill.find(qn("a:srgbClr"))
+        if srgb is not None:
+            alpha = srgb.makeelement(qn("a:alpha"), {"val": str(alpha_pct * 1000)})
+            srgb.append(alpha)
+        slide.shapes._spTree.remove(scrim._element)
+        slide.shapes._spTree.insert(3, scrim._element)
+    except Exception:
+        pass
+
+
+def _add_overlay_band_scrim(slide, Inches, *, alpha_pct: int = 70) -> None:
+    """Bold style's 'overlay-band' variant — same idea as _add_overlay_scrim
+    but confined to a bottom band instead of the full slide, so most of the
+    photo stays visible instead of every image slide looking identically
+    dark. Slightly higher alpha than the full scrim since the band sits
+    directly behind text with no other help from surrounding darkness.
+
+    Covers the bottom ~39% of the slide (was ~32%) — a real report showed
+    text legible against the scrim itself but still competing with visible
+    photo detail right at the band's old top edge; the extra margin, paired
+    with the image prompt's own "keep the lower third clear" composition
+    hint (see presentation_compile's bold_variant image-prompt block), gives
+    real headroom instead of assuming the subject never drifts low."""
+    try:
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        from pptx.oxml.ns import qn
+
+        scrim = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(4.6), Inches(10), Inches(2.9))
+        scrim.fill.solid()
+        scrim.fill.fore_color.rgb = RGBColor(0, 0, 0)
+        scrim.line.fill.background()
+        srgb = scrim.fill.fore_color._xFill.find(qn("a:srgbClr"))
+        if srgb is not None:
+            alpha = srgb.makeelement(qn("a:alpha"), {"val": str(alpha_pct * 1000)})
+            srgb.append(alpha)
+        slide.shapes._spTree.remove(scrim._element)
+        slide.shapes._spTree.insert(3, scrim._element)
+    except Exception:
+        pass
+
+
+def _apply_overlay_band_text(slide, Inches, Pt) -> None:
+    """Confines title+body to the bottom band for bold's 'overlay-band'
+    variant, matching _add_overlay_band_scrim's geometry — otherwise the
+    default title-at-top position would sit on unscrimmed photo."""
+    left = Inches(0.5)
+    width = Inches(9.0)
+    try:
+        title = slide.shapes.title
+        if title is not None:
+            title.left = left
+            title.top = Inches(4.75)
+            title.width = width
+            title.height = Inches(0.85)
+    except Exception:
+        pass
+    try:
+        if len(slide.placeholders) > 1:
+            body = slide.placeholders[1]
+            body.left = left
+            body.top = Inches(5.6)
+            body.width = width
+            body.height = Inches(1.7)
+            if body.has_text_frame:
+                _cap_body_text_frame(body.text_frame, Pt, max_bullets=3, max_chars=110, font_pt=14)
     except Exception:
         pass
 

@@ -248,24 +248,21 @@ def _is_junk_slide_block(block: str, *, all_titles: list[str]) -> bool:
     bullets = _slide_bullet_texts(block)
     if _bullets_are_generic_filler(bullets):
         return True
-    # Bare "Agenda"/"Outline" when a richer "Agenda: …" slide already exists
-    if tl in ("agenda", "outline"):
-        if any(
-            _is_agenda_title(t) and t.strip().lower() not in ("agenda", "outline")
-            for t in all_titles
-        ):
-            return True
-        other = {
-            re.sub(r"[.!?]+$", "", t.strip().lower())
-            for t in all_titles
-            if t.strip().lower() not in ("agenda", "outline", "")
-        }
-        if bullets and other and all(
-            re.sub(r"[.!?]+$", "", b.strip().lower()) in other
-            or any(re.sub(r"[.!?]+$", "", b.strip().lower()) in ot for ot in other)
-            for b in bullets
-        ):
-            return True
+    # Bare "Agenda"/"Outline" when a richer "Agenda: …" slide ALSO exists —
+    # a genuine duplicate (two agenda-shaped slides), not just "an agenda
+    # whose bullets happen to match the other slide titles". That second
+    # case used to also be treated as junk here, but a correct agenda is
+    # *supposed* to list the same section names as the content slides it
+    # summarizes — that's not a duplicate, it's the whole point of an
+    # agenda. That over-broad check was silently deleting every legitimate
+    # agenda slide the structured deck pipeline produces (confirmed via a
+    # real run: "10 slides" requested and confirmed in chat, compiled to 9
+    # because the agenda slide got scrubbed as "junk").
+    if tl in ("agenda", "outline") and any(
+        _is_agenda_title(t) and t.strip().lower() not in ("agenda", "outline")
+        for t in all_titles
+    ):
+        return True
     return False
 
 

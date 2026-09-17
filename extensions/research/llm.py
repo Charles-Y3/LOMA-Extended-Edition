@@ -298,11 +298,21 @@ def _cut_repeated_tail(text: str) -> str:
     """Small local models occasionally degenerate into repeating an entire paragraph
     verbatim dozens of times once they've said everything meaningful but generation
     hasn't hit its stop condition yet. A legitimate report never repeats a full
-    paragraph (200+ chars) word-for-word, so once one is seen twice, cut there."""
+    paragraph (200+ chars) word-for-word, so once one is seen twice, cut there.
+
+    A degenerate restart doesn't always repeat a long paragraph, though — confirmed
+    failure: hitting the output limit mid-sentence in the conclusion, the model
+    broke into re-emitting the report's own title line (short, well under 200
+    chars) as if starting over. The title line is unique to this document and never
+    legitimately repeats, so treat any exact repeat of paragraph 0 (the title) as
+    an equally strong repetition signal regardless of length."""
     paras = text.split("\n\n")
     seen: set[str] = set()
+    title = paras[0].strip() if paras else ""
     for i, para in enumerate(paras):
         key = para.strip()
+        if i > 0 and title and key == title:
+            return "\n\n".join(paras[:i]).rstrip()
         if len(key) < 200:
             continue
         if key in seen:

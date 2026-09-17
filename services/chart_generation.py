@@ -59,6 +59,62 @@ def _parse_json(raw: str) -> dict | None:
 
 _VALID_CHART_TYPES = {"bar", "line", "pie"}
 
+_NUMBER_TOKEN_RE = re.compile(r"\d[\d,]*\.?\d*")
+
+
+def _context_numbers(context: str) -> set[float]:
+    numbers: set[float] = set()
+    for tok in _NUMBER_TOKEN_RE.findall(context or ""):
+        try:
+            numbers.add(float(tok.replace(",", "")))
+        except ValueError:
+            continue
+    return numbers
+
+
+def _values_supported_by_context(series: list[dict], context: str, *, min_fraction: float = 0.5) -> bool:
+    """At least `min_fraction` of the authored values must appear as a real
+    number somewhere in the grounding text (tolerating float/int display and
+    small rounding differences) — otherwise the model filled the JSON schema
+    with plausible-looking numbers instead of transcribing real ones. Note:
+    this check is weak for small values (single/double digits coincidentally
+    appear almost anywhere — dates, list markers, section numbers) — it's a
+    second layer, not a substitute for keeping irrelevant pages out of
+    `context` in the first place (see pipeline/base/source_relevance.py's
+    min_keyword_overlap)."""
+    if not series:
+        return False
+    context_numbers = _context_numbers(context)
+    if not context_numbers:
+        return False
+    supported = 0
+    for pt in series:
+        value = pt.get("value")
+        if not isinstance(value, (int, float)):
+            continue
+        if any(
+            abs(value - n) < 0.05 or (n != 0 and abs(value - n) / abs(n) < 0.02)
+            for n in context_numbers
+        ):
+            supported += 1
+    return (supported / len(series)) >= min_fraction
+
+
+def _looks_synthetic_sequence(series: list[dict]) -> bool:
+    """A perfectly arithmetic sequence (identical step between every
+    consecutive value, e.g. 1, 2, 3, ... 11) is a strong tell the model filled
+    the schema with a plausible-looking progression instead of transcribing
+    real, messy numbers — confirmed via a real run: a "disaster frequency"
+    chart rendered exactly 1 through 11 across 2014-2024, sourced (per its own
+    citation) from a page about daily world temperature records that never
+    mentioned disaster counts at all. Real-world data essentially never lands
+    on a perfect straight line across many points."""
+    values = [pt.get("value") for pt in series if isinstance(pt.get("value"), (int, float))]
+    if len(values) < 4:
+        return False
+    diffs = {round(values[i + 1] - values[i], 6) for i in range(len(values) - 1)}
+    return len(diffs) == 1 and next(iter(diffs)) != 0
+
 
 def _author_chart(user_query: str, prof: dict, model: str, context: str = "") -> dict:
     if not (context or "").strip():
@@ -103,8 +159,16 @@ def _author_chart(user_query: str, prof: dict, model: str, context: str = "") ->
     if chart_type not in _VALID_CHART_TYPES:
         chart_type = "bar"
     if not series:
-        series = [{"label": user_query.strip()[:24] or "N/A", "value": 0.0}]
-        chart_type = "bar"
+        raise ValueError("Chart author returned no usable data points — refusing to render an empty/fabricated chart.")
+    if _looks_synthetic_sequence(series):
+        raise ValueError(
+            "Authored series is a perfectly arithmetic sequence — refusing as likely fabricated rather than transcribed."
+        )
+    if not _values_supported_by_context(series, context):
+        raise ValueError(
+            "Authored chart values don't trace to any real number in the grounding material — "
+            "refusing to fabricate chart data."
+        )
 
     return {
         "title": str(data.get("title") or "").strip(),

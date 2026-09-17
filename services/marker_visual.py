@@ -80,24 +80,40 @@ def resolve_marker_visual(
     bundle=None,
     source_text: str = "",
     settings: dict | None = None,
-) -> str | None:
-    """Returns the produced image path, or None on failure. `prof`/`model` are
-    required for diagram/infographic generation (they author structured content via
-    an LLM call) — when either is missing, always falls back to a plain photo, so a
-    caller that can't supply a profile keeps today's behavior unchanged.
+    topic_text: str = "",
+) -> tuple[str | None, list[dict[str, str]]]:
+    """Returns (produced image path or None on failure, web sources used). The
+    sources list is only ever non-empty when a chart/diagram/infographic was
+    genuinely grounded in a real web search (see pipeline/base/grounding.py) —
+    never for a plain photo or an attached-source excerpt (not an online
+    citation) — so a caller can cite it directly without risking a fabricated
+    reference. `prof`/`model` are required for diagram/infographic generation
+    (they author structured content via an LLM call) — when either is missing,
+    always falls back to a plain photo, so a caller that can't supply a profile
+    keeps today's behavior unchanged.
 
     `prompt` drives classification and diagram/infographic authoring (it should be
     the marker's own free-text description). `photo_prompt`, if given, is used
     instead of `prompt` only for the plain-photo fallback — lets a caller pass a
     diffusion-tuned variant (e.g. with extra scene context) without that context
     leaking into diagram/infographic authoring, which expects a plain description.
+    `topic_text`, if given, drives the WEB SEARCH specifically (falls back to
+    `prompt` when empty) — a caller with more trustworthy surrounding text (e.g.
+    the slide's own already-written title/bullets) should pass it, since a
+    marker's own free-text description can invent a framing detail (a
+    comparison axis, an extra qualifier) that isn't actually in the slide's
+    content, which then dominates the search and grounds the visual in
+    something the slide was never about (confirmed via a real run: a "recovery
+    strategies" slide's image marker invented "vs. traditional emergency
+    vehicles" as a comparison axis, and the resulting chart ended up about
+    firetrucks instead of the slide's actual green-infrastructure content).
 
     `bundle`/`settings`, if given, are used to resolve grounding context (an
     attached-source excerpt, or a web search if grounding is enabled) before
     authoring a diagram/infographic — see pipeline/base/grounding.py."""
     prompt = (prompt or "").strip()
     if not prompt:
-        return None
+        return None, []
 
     if prof and model:
         try:
@@ -120,7 +136,8 @@ def resolve_marker_visual(
         if intent in ("diagram", "infographic_stat", "infographic_timeline", "infographic_comparison", "chart"):
             broad_trigger = intent != "diagram"
             context, sources = _resolve_context(
-                prompt, bundle, source_text, settings, broad_trigger=broad_trigger, log_fn=log_fn
+                (topic_text or prompt).strip(), bundle, source_text, settings,
+                broad_trigger=broad_trigger, log_fn=log_fn,
             )
             if intent == "diagram":
                 path = _try_diagram(prompt, output_path, prof, model, log_fn, context)
@@ -130,7 +147,7 @@ def resolve_marker_visual(
                 kind = intent.split("_", 1)[1]
                 path = _try_infographic(prompt, output_path, prof, model, log_fn, context, kind=kind)
             if path:
-                return path
+                return path, sources
             # Classification succeeded but the dedicated renderer itself failed
             # (author LLM error, malformed JSON, render exception — see the
             # _try_* functions' own except blocks) — visibly distinct from
@@ -143,7 +160,7 @@ def resolve_marker_visual(
                     "diagram/infographic content)."
                 )
 
-    return _try_photo(photo_prompt or prompt, output_path, log_fn)
+    return _try_photo(photo_prompt or prompt, output_path, log_fn), []
 
 
 def _resolve_context(

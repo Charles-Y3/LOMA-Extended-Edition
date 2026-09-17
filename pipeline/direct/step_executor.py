@@ -41,38 +41,41 @@ PRESENTATION_STYLE_PROMPT_BIAS = {
         "(10+ slides). Use a visual only where it's truly essential, never decoratively. Keep "
         "bullets short and few."
     ),
-    "bold_editorial": (
-        "Deck style: Bold/Editorial. Prefer full-bleed, high-impact visuals wherever a visual is "
-        "used (a strong photo or scene, not a small illustrative one). Include at least one "
-        "'quote' layout slide for a standout stat or quote if the material actually contains one "
-        "quotable line or number — never invent one. For a longer deck (6+ slides), use 'section' "
-        "divider slides between major parts."
+    "bold": (
+        "Deck style: Bold. Prefer full-bleed, high-impact visuals wherever a visual is used (a "
+        "strong photo or scene, not a small illustrative one) — the compiler automatically varies "
+        "the treatment slide to slide (full overlay, bottom-band, split-hero), so just describe a "
+        "strong, specific scene each time. Include at least one 'quote' layout slide for a "
+        "standout stat or quote if the material actually contains one quotable line or number — "
+        "never invent one. For a longer deck (6+ slides), use 'section' divider slides between "
+        "major parts."
     ),
-    "data_heavy": (
-        "Deck style: Data-heavy. Whenever a slide's content has any numbers, trends, a process, or "
-        "a comparison between two or more things, phrase that slide's visual description as a "
+    "insight": (
+        "Deck style: Insight. Whenever a slide's content has any numbers, trends, a process, or a "
+        "comparison between two or more things, phrase that slide's visual description as a "
         "chart/diagram/comparison request (see the visual-description guidance above) instead of a "
         "generic photo — prefer this far more aggressively than usual. Include a 'quote' layout "
-        "slide for the single most striking statistic in the material, if one exists. Every "
-        "content slide should reserve its right-hand side for the chart/diagram/visual and keep "
-        "the accent bar visible — text stays left-aligned and dense (short label + supporting line "
-        "per point, not long prose bullets)."
+        "slide for the single most striking statistic in the material, if one exists. The compiler "
+        "automatically gives charts/diagrams the full slide width and keeps comparisons/photos in "
+        "a side column, so just focus on requesting the right visual type per slide — keep the "
+        "accent bar visible and text dense (short label + supporting line per point, not long "
+        "prose bullets)."
     ),
 }
 
 # Fallback bias for styles whose default text assumes real source data to chart (only
-# "data_heavy" needs one today) — used when the deck has no parsed_sources to draw
+# "insight" needs one today) — used when the deck has no parsed_sources to draw
 # numbers from, so the planner isn't pushed into inventing statistics/charts (see
 # PresentationBrief.to_system_block()'s has_source_data rule, which forbids this too —
 # this is the style-specific half of the same guarantee).
 PRESENTATION_STYLE_PROMPT_BIAS_NO_SOURCE = {
-    "data_heavy": (
-        "Deck style: Data-heavy, but no source documents/datasets were provided — do not invent "
+    "insight": (
+        "Deck style: Insight, but no source documents/datasets were provided — do not invent "
         "numbers or request chart/stat visuals (see the Data integrity rule above). Keep the same "
-        "dense, right-visual-column layout and accent bar, but phrase visuals as process/comparison "
-        "diagrams (flow, before/after, categories) built from qualitative structure in the content, "
-        "never numeric charts. Include a 'quote' layout slide only for an actual quotable line in "
-        "the material, never a fabricated statistic."
+        "dense text and accent bar, but phrase visuals as process/comparison diagrams (flow, "
+        "before/after, categories) built from qualitative structure in the content, never numeric "
+        "charts. Include a 'quote' layout slide only for an actual quotable line in the material, "
+        "never a fabricated statistic."
     ),
 }
 
@@ -506,13 +509,13 @@ def _run_generation_step(
                 f"or date that isn't supported by it:\n{ground_ctx}"
             )
         style_bias = PRESENTATION_STYLE_PROMPT_BIAS.get(cfg.presentation_style, "")
-        if style_bias and (has_source_data or cfg.presentation_style != "data_heavy"):
+        if style_bias and (has_source_data or cfg.presentation_style != "insight"):
             system += "\n\n" + style_bias
-        elif cfg.presentation_style == "data_heavy":
-            # No source data to chart — data_heavy still gets its denser-layout bias,
+        elif cfg.presentation_style == "insight":
+            # No source data to chart — insight still gets its denser-layout bias,
             # just without the "phrase visuals as charts/stats" instruction that would
             # otherwise push the planner into inventing numbers to fill them.
-            system += "\n\n" + PRESENTATION_STYLE_PROMPT_BIAS_NO_SOURCE["data_heavy"]
+            system += "\n\n" + PRESENTATION_STYLE_PROMPT_BIAS_NO_SOURCE["insight"]
         messages[0] = {"role": "system", "content": system}
     if role_id == "slide_author" and plan.output_type == "presentation":
         from pipeline.deliverables.presentation_brief import build_presentation_brief
@@ -1987,6 +1990,33 @@ def run_direct_pipeline(
         combined_prep = _combined_prep_step(role_id, steps, idx)
         skip_llm = False
         step_out = ""
+        new_pipeline_spec = None
+        if output_type == "presentation" and role_id == "deck_planner":
+            # Structured pipeline (extract → group → per-slide author+verify →
+            # translate image prompts) replaces the old single freeform
+            # "invent the whole deck" call — see pipeline/deliverables/
+            # deck_pipeline.py's module docstring for why. Falls back to the
+            # legacy path below only on total failure (e.g. no LLM at all).
+            from pipeline.deliverables.deck_pipeline import build_deck_via_pipeline
+            from pipeline.deliverables.specs import infer_slide_count
+            from services.session import state as loma_state
+
+            target = infer_slide_count(request.user_input) or 8
+            new_pipeline_spec, spec_grounded = build_deck_via_pipeline(
+                query=request.user_input,
+                bundle=bundle,
+                settings=loma_state.current_settings,
+                prof=prof,
+                model=model,
+                target_slides=target,
+                log_fn=sink.log,
+            )
+            if new_pipeline_spec is not None and new_pipeline_spec.slides:
+                pipeline_cfg.presentation_grounded = spec_grounded
+                step_out = new_pipeline_spec.to_markdown()
+                skip_llm = True
+            else:
+                new_pipeline_spec = None
         if (
             output_type == "presentation"
             and role_id == "slide_author"
@@ -2069,36 +2099,43 @@ def run_direct_pipeline(
         else:
             working_text = step_out
         if output_type == "presentation" and role_id == "deck_planner" and (step_out or "").strip():
-            from pipeline.deliverables.presentation_deck import (
-                parse_deck_spec,
-                repair_deck_spec,
-                validate_deck_spec,
-            )
-            from pipeline.deliverables.presentation_finalize import is_compile_ready_presentation
             from pipeline.deliverables.presentation_theme import resolve_theme, theme_meta_block
-            from pipeline.deliverables.specs import infer_slide_count
 
-            spec, _ = parse_deck_spec(step_out)
+            if new_pipeline_spec is not None:
+                spec = new_pipeline_spec
+            else:
+                # Legacy fallback — only reached when build_deck_via_pipeline
+                # itself failed outright (see its own except-and-log).
+                from pipeline.deliverables.presentation_deck import (
+                    parse_deck_spec,
+                    repair_deck_spec,
+                    validate_deck_spec,
+                )
+                from pipeline.deliverables.specs import infer_slide_count
+
+                spec, _ = parse_deck_spec(step_out)
+                if spec and spec.slides:
+                    target = infer_slide_count(request.user_input) or 8
+                    spec = repair_deck_spec(spec, query=request.user_input, target_slides=target)
+                    v = validate_deck_spec(spec, slide_count=target)
+                    if not (v.valid or len(spec.slides) >= 3):
+                        spec = None
             if spec and spec.slides:
-                target = infer_slide_count(request.user_input) or 8
-                spec = repair_deck_spec(spec, query=request.user_input, target_slides=target)
-                v = validate_deck_spec(spec, slide_count=target)
-                if v.valid or len(spec.slides) >= 3:
-                    planned_deck_spec = spec
-                    style_id = str(config.get("presentation_style") or "")
-                    if style_id:
-                        from pipeline.deliverables.presentation_theme import resolve_style_palette
+                planned_deck_spec = spec
+                style_id = str(config.get("presentation_style") or "")
+                if style_id:
+                    from pipeline.deliverables.presentation_theme import resolve_style_palette
 
-                        forced_palette = resolve_style_palette(style_id)
-                        if forced_palette:
-                            spec.design = {**(spec.design or {}), "palette": forced_palette}
-                    theme = resolve_theme(query=request.user_input, design=spec.design)
-                    working_text = theme_meta_block(theme) + "\n\n" + spec.to_markdown()
-                    step_out = working_text
-                    sink.set_assistant_content(
-                        f"📋 **Deck planned** — {len(spec.slides)} slides. Compiling presentation…"
-                    )
-                    sink.refresh_chat()
+                    forced_palette = resolve_style_palette(style_id)
+                    if forced_palette:
+                        spec.design = {**(spec.design or {}), "palette": forced_palette}
+                theme = resolve_theme(query=request.user_input, design=spec.design)
+                working_text = theme_meta_block(theme) + "\n\n" + spec.to_markdown()
+                step_out = working_text
+                sink.set_assistant_content(
+                    f"📋 **Deck planned** — {len(spec.slides)} slides. Compiling presentation…"
+                )
+                sink.refresh_chat()
         if (
             output_type == "presentation"
             and role_id == "slide_author"

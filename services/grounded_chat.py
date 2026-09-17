@@ -445,10 +445,25 @@ def gather_grounded_context(
     query: str,
     *,
     log_fn: Callable[[str], None] | None = None,
+    topic_relevance: bool = False,
 ) -> tuple[str, list[dict[str, str]]]:
     """
     Search the web, fetch a few pages, return (context_block, sources).
     Only public http(s) URLs from search results are fetched.
+
+    `topic_relevance=True` (used by report-shaped grounding — charts/diagrams/
+    infographics/presentations, see pipeline/base/grounding.py) turns on two
+    mechanical, no-extra-LLM-call filters that plain chat grounding doesn't
+    need: a lenient domain-credibility gate (drops personal blogs/forums and
+    obvious non-data sources like presentation-template marketplaces before
+    they're even fetched — see pipeline/base/source_relevance.py) and
+    sentence-level relevance extraction (a fetched page is usually mostly
+    irrelevant to the one fact/number being asked for; this keeps only the
+    handful of sentences that actually mention it, instead of truncating to
+    the first N characters and hoping). A page that survives credibility but
+    has nothing relevant is dropped entirely rather than included thin —
+    "no real support found" is the correct signal for a chart/diagram to
+    refuse instead of fabricating.
     """
     from extensions.research.web_search import load_source, search_web_batch
 
@@ -485,6 +500,22 @@ def gather_grounded_context(
         allow_wikipedia=False,
     )
     safe_hits = [h for h in hits if is_url_safe(h.get("url") or "")]
+    if topic_relevance and safe_hits:
+        from pipeline.base.source_relevance import (
+            CREDIBILITY_MIN,
+            heuristic_credibility,
+            is_non_data_source,
+        )
+
+        filtered = []
+        for h in safe_hits:
+            url, title = (h.get("url") or "").strip(), (h.get("title") or "").strip()
+            if is_non_data_source(title, url):
+                continue
+            score, _note = heuristic_credibility(url, title)
+            if score >= CREDIBILITY_MIN:
+                filtered.append(h)
+        safe_hits = filtered
     if not safe_hits and not blocks:
         log(tr("console.grounded_no_urls"))
         return "", []
@@ -504,9 +535,19 @@ def gather_grounded_context(
         if not text or len(text) < 80:
             continue
         title = (loaded.get("title") or hit.get("title") or url).strip()
-        snippet = text[:_MAX_SNIPPET_CHARS]
-        if len(text) > _MAX_SNIPPET_CHARS:
-            snippet += "…"
+        if topic_relevance:
+            from pipeline.base.source_relevance import extract_relevant_sentences
+
+            relevant = extract_relevant_sentences(text, query, max_sentences=6)
+            if not relevant:
+                # Credible source, but nothing in it actually addresses this
+                # request — skip rather than pad the context with noise.
+                continue
+            snippet = " ".join(relevant)
+        else:
+            snippet = text[:_MAX_SNIPPET_CHARS]
+            if len(text) > _MAX_SNIPPET_CHARS:
+                snippet += "…"
         block = f"### {title}\nURL: {url}\n{snippet}"
         if total + len(block) > _MAX_TOTAL_CONTEXT:
             break

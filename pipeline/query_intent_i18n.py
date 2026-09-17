@@ -859,19 +859,19 @@ CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
         "es": ("presentación minimalista", "presentación estilo minimalista"),
         "de": ("minimalistische präsentation", "präsentation im minimal-stil"),
     },
-    "presentation_style_bold_editorial_hints": {
-        "en": ("bold presentation", "editorial style presentation", "bold editorial deck", "bold style presentation"),
+    "presentation_style_bold_hints": {
+        "en": ("bold presentation", "editorial style presentation", "bold editorial deck", "bold style presentation", "magazine style presentation"),
         "zh_tw": ("大膽風格簡報", "雜誌風格簡報", "編輯風格簡報"),
         "zh_cn": ("大胆风格演示文稿", "杂志风格演示文稿", "编辑风格演示文稿"),
-        "es": ("presentación audaz", "presentación estilo editorial"),
-        "de": ("mutige präsentation", "präsentation im editorial-stil"),
+        "es": ("presentación audaz", "presentación estilo editorial", "presentación estilo revista"),
+        "de": ("mutige präsentation", "präsentation im editorial-stil", "präsentation im magazin-stil"),
     },
-    "presentation_style_data_heavy_hints": {
-        "en": ("data-heavy presentation", "data heavy deck", "data-driven presentation", "chart-heavy presentation"),
-        "zh_tw": ("數據導向簡報", "數據密集簡報", "圖表導向簡報"),
-        "zh_cn": ("数据导向演示文稿", "数据密集演示文稿", "图表导向演示文稿"),
-        "es": ("presentación con muchos datos", "presentación orientada a datos"),
-        "de": ("datenlastige präsentation", "datengetriebene präsentation"),
+    "presentation_style_insight_hints": {
+        "en": ("insight presentation", "insight deck", "insight-driven presentation", "chart-forward presentation", "data-heavy presentation", "chart-heavy presentation"),
+        "zh_tw": ("洞察風格簡報", "洞察簡報", "圖表導向簡報", "數據導向簡報"),
+        "zh_cn": ("洞察风格演示文稿", "洞察演示文稿", "图表导向演示文稿", "数据导向演示文稿"),
+        "es": ("presentación de perspectivas", "presentación orientada a gráficos", "presentación con muchos datos"),
+        "de": ("einblick-präsentation", "diagrammorientierte präsentation", "datenlastige präsentation"),
     },
     # Stage-2 safety net for pipeline/direct/image_intent.py::classify_image_request()
     # — bare/loose words, not fixed phrases, deliberately broader than the
@@ -1020,6 +1020,39 @@ CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
         "zh_cn": ("只要内容", "仅内容"),
         "es": ("solo el contenido", "únicamente el contenido", "unicamente el contenido"),
         "de": ("nur der inhalt", "nur den inhalt"),
+    },
+    "quantity_words": {
+        # Vague/indefinite plural quantifiers — "a few", "some", "several" — plus
+        # number-words two..ten. Bare digits ("3") are locale-agnostic and matched
+        # separately by callers via a plain \d regex, not listed here.
+        "en": (
+            "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "a few", "few", "some", "several", "multiple", "a couple", "couple of", "many",
+        ),
+        "zh_tw": ("兩個", "三個", "幾個", "一些", "幾種", "多個", "數個", "好幾個"),
+        "zh_cn": ("两个", "三个", "几个", "一些", "几种", "多个", "数个", "好几个"),
+        "es": (
+            "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+            "unos pocos", "algunos", "algunas", "varios", "varias", "múltiples", "multiples",
+            "un par de",
+        ),
+        "de": (
+            "zwei", "drei", "vier", "fünf", "fuenf", "sechs", "sieben", "acht", "neun", "zehn",
+            "ein paar", "einige", "mehrere", "mehrfach", "verschiedene",
+        ),
+    },
+    "plural_item_nouns": {
+        "en": ("translat", "version", "option", "alternativ", "way", "example", "point", "idea"),
+        "zh_tw": ("翻譯", "版本", "選項", "方案", "方式", "例子", "例句", "重點", "想法"),
+        "zh_cn": ("翻译", "版本", "选项", "方案", "方式", "例子", "例句", "重点", "想法"),
+        "es": (
+            "traduc", "versión", "version", "opción", "opcion", "alternativ", "manera",
+            "ejemplo", "punto", "idea",
+        ),
+        "de": (
+            "übersetz", "uebersetz", "version", "option", "alternativ", "möglichkeit",
+            "moeglichkeit", "beispiel", "punkt", "idee",
+        ),
     },
 }
 

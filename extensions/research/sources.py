@@ -5,30 +5,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
 
-_TRUSTED_TLDS = (".gov", ".edu", ".ac.uk", ".gov.uk")
-_KNOWN_PUBLISHERS = (
-    "wikipedia.org",
-    "nih.gov",
-    "who.int",
-    "nature.com",
-    "sciencedirect.com",
-    "springer.com",
-    "jstor.org",
-    "pubmed",
-    "ncbi.nlm.nih.gov",
-    "psychologytoday.com",
-    "verywellmind.com",
-    "harvard.edu",
-    "stanford.edu",
-    "ox.ac.uk",
-    "cambridge.org",
-    "reuters.com",
-    "bbc.com",
-    "bbc.co.uk",
-)
-_LOW_TRUST = ("blogspot.", "wordpress.com", "medium.com", "reddit.com", "quora.com", "pinterest.")
+# domain_from_url/heuristic_credibility live in pipeline.base.source_relevance
+# now — the same lenient domain-trust heuristic is also used by report-shaped
+# grounding (charts/diagrams/presentations, see pipeline/base/grounding.py),
+# so it moved to core rather than staying duplicated here.
+from pipeline.base.source_relevance import domain_from_url, heuristic_credibility
 
 
 @dataclass
@@ -62,38 +44,6 @@ class ResearchSource:
             "key_points": list(self.key_points),
             "selected": self.selected,
         }
-
-
-def domain_from_url(url: str) -> str:
-    try:
-        host = (urlparse(url).netloc or "").lower()
-        if host.startswith("www."):
-            host = host[4:]
-        return host
-    except Exception:
-        return ""
-
-
-def heuristic_credibility(url: str, title: str = "", source_type: str = "web") -> tuple[float, str]:
-    host = domain_from_url(url)
-    if not host:
-        return 0.35, "No URL — treat as unverified"
-    if source_type == "upload":
-        return 0.75, "User-provided document"
-    if "wikipedia.org" in host:
-        return 0.72, "Wikipedia — good overview; verify primary claims"
-    for tld in _TRUSTED_TLDS:
-        if host.endswith(tld) or tld.strip(".") in host:
-            return 0.9, f"Institutional domain ({host})"
-    for pub in _KNOWN_PUBLISHERS:
-        if pub in host:
-            return 0.82, f"Recognized publisher ({host})"
-    for low in _LOW_TRUST:
-        if low in host:
-            return 0.4, f"Informal / user-generated ({host})"
-    if host.count(".") >= 2:
-        return 0.58, f"General web source ({host})"
-    return 0.5, f"Web source ({host})"
 
 
 def hit_to_source(hit: dict[str, str], text: str) -> ResearchSource:

@@ -349,7 +349,7 @@ def _generate_image_for_marker(
     from services.marker_visual import resolve_marker_visual
 
     output_path = os.path.join(GENERATED_DIR, "images", f"{stem}_image_{index}.png")
-    path = resolve_marker_visual(
+    path, _sources = resolve_marker_visual(
         prompt, output_path=output_path, prof=prof, model=model,
         source_text=source_text, settings=settings,
         log_fn=lambda m: _debug_log("marker visual", {"message": m}),

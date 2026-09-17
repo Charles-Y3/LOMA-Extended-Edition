@@ -87,7 +87,13 @@ def resolve_generation_context(
     try:
         from services.grounded_chat import gather_grounded_context
 
-        web_ctx, sources = gather_grounded_context(query, log_fn=log_fn)
+        # broad_trigger==True is exactly "this is a report-shaped caller"
+        # (chart/diagram/infographic/presentation/document synthesis) at every
+        # call site in this codebase — plain chat grounding never sets it —
+        # so it doubles as the signal for gather_grounded_context's stricter,
+        # relevance-filtered fetch (see its docstring) without adding a
+        # separate parameter every caller has to remember to pass.
+        web_ctx, sources = gather_grounded_context(query, log_fn=log_fn, topic_relevance=broad_trigger)
     except Exception as ex:
         if log_fn:
             log_fn(f"Grounding: web search failed, proceeding without it: {ex}")

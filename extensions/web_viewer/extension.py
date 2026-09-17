@@ -72,7 +72,16 @@ def build_web_viewer_panel() -> None:
         ui.run_javascript(f"navigator.clipboard.writeText({payload})")
         ui.notify(tr("web_viewer.copy_done"), color="positive", timeout=1500)
 
-    def send_viewer_query(sel: str, instruction: str, *, display_text: str | None = None) -> None:
+    def send_viewer_query(
+        sel: str,
+        instruction: str,
+        use_kv: bool = False,
+        kv_mode: str = "ask",
+        kv_scope: str = "all",
+        kv_library_id: str | None = None,
+        *,
+        display_text: str | None = None,
+    ) -> None:
         url = (web_url_holder["input"].value or "") if web_url_holder["input"] else ""
         source_part = url.strip() or "the web page"
         query = (
@@ -95,7 +104,10 @@ def build_web_viewer_panel() -> None:
         from ui.themes.assets import schedule_scroll_chat
 
         schedule_scroll_chat()
-        start_web_highlight_workflow(query, instruction)
+        start_web_highlight_workflow(
+            query, instruction,
+            use_kv=use_kv, kv_mode=kv_mode, kv_scope=kv_scope, kv_library_id=kv_library_id,
+        )
 
     def _run_whole_page_instruction(instruction_key: str, nothing_key: str) -> None:
         content = _web_state["last_scraped_dict"]
@@ -119,11 +131,10 @@ def build_web_viewer_panel() -> None:
         url = (web_url_holder["input"].value or "") if web_url_holder["input"] else ""
 
         open_highlight_dialog(
-            "Query highlighted text",
+            tr("document_editor.query_highlighted"),
             highlight,
             on_query=send_viewer_query,
             source_label=f"web_{url or 'page'}",
-            show_revise=False,
         )
 
     with ui.column().classes("w-full flex-1 min-h-0 flex flex-col gap-2"):

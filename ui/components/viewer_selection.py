@@ -55,16 +55,88 @@ def add_text_to_sources(text: str, label: str = "viewer_excerpt") -> None:
         pass
 
 
+def _render_kv_controls() -> dict:
+    """Checkbox + mode/scope/library selects letting the user ground this Ask LOMA
+    query in their Knowledge Vault catalog. Mirrors the vault-checkbox pattern
+    in extensions/formslator/tabs/translate.py (settings-persisted select boxes)."""
+    from extensions.knowledge_vault.corpus.backend_resolver import has_any_kv_data
+    from extensions.knowledge_vault.corpus.library import list_libraries
+    from extensions.knowledge_vault.ui.constants import mode_options
+    from services.session.settings import save_settings
+
+    cfg = state.current_settings or {}
+    ctrl: dict = {
+        "use_kv": bool(cfg.get("highlight_use_kv", False)),
+        "mode": str(cfg.get("highlight_kv_mode") or "ask"),
+        "scope": str(cfg.get("highlight_kv_scope") or "all"),
+        "library_id": str(cfg.get("highlight_kv_library_id") or ""),
+    }
+    # "workspace" is deliberately not a selectable scope here — session/current-
+    # document content stays usable inside Knowledge Vault's own tabs only, never
+    # from this popup (see resolve_kv_backend's include_workspace=False call below).
+    if ctrl["scope"] == "workspace":
+        ctrl["scope"] = "all"
+
+    if not has_any_kv_data():
+        # Nothing indexed anywhere (no workspace session, no ready libraries) — don't
+        # show the checkbox at all rather than offer a control that can only ever
+        # return zero hits. Force use_kv off so callers never attempt the search.
+        ctrl["use_kv"] = False
+        return ctrl
+
+    use_kv_cb = ui.checkbox(tr("viewer.highlight_use_kv"), value=ctrl["use_kv"]).props("dense")
+
+    with ui.column().classes("w-full gap-1") as options_col:
+        modes = mode_options()
+        mode_sel = ui.select(
+            options=modes, value=ctrl["mode"] if ctrl["mode"] in modes else "ask",
+            label=tr("viewer.highlight_kv_mode_label"),
+        ).classes("w-full").props("dense standout")
+
+        scopes = {
+            "all": tr("viewer.highlight_kv_scope_all"),
+            "selected": tr("viewer.highlight_kv_scope_selected"),
+        }
+        scope_sel = ui.select(
+            options=scopes, value=ctrl["scope"] if ctrl["scope"] in scopes else "all",
+            label=tr("viewer.highlight_kv_scope_label"),
+        ).classes("w-full").props("dense standout")
+
+        libraries = {lib.library_id: lib.name for lib in list_libraries()}
+        library_sel = ui.select(
+            options=libraries, value=ctrl["library_id"] if ctrl["library_id"] in libraries else None,
+            label=tr("viewer.highlight_kv_library_label"),
+        ).classes("w-full").props("dense standout")
+        library_sel.bind_visibility_from(scope_sel, "value", value="selected")
+
+    options_col.bind_visibility_from(use_kv_cb, "value")
+
+    def _persist(_=None) -> None:
+        ctrl["use_kv"] = bool(use_kv_cb.value)
+        ctrl["mode"] = str(mode_sel.value or "ask")
+        ctrl["scope"] = str(scope_sel.value or "all")
+        ctrl["library_id"] = str(library_sel.value or "")
+        cfg["highlight_use_kv"] = ctrl["use_kv"]
+        cfg["highlight_kv_mode"] = ctrl["mode"]
+        cfg["highlight_kv_scope"] = ctrl["scope"]
+        cfg["highlight_kv_library_id"] = ctrl["library_id"]
+        save_settings(cfg, quiet=True)
+
+    use_kv_cb.on_value_change(_persist)
+    mode_sel.on_value_change(_persist)
+    scope_sel.on_value_change(_persist)
+    library_sel.on_value_change(_persist)
+
+    return ctrl
+
+
 def open_highlight_dialog(
     title: str,
     selection: str,
     *,
     on_query,
     source_label: str = "excerpt",
-    revise_allowed: bool = False,
-    on_revise=None,
     show_add_to_sources: bool = True,
-    show_revise: bool = True,
 ) -> None:
     global _highlight_dialog_open
     sel = (selection or "").strip()
@@ -84,6 +156,8 @@ def open_highlight_dialog(
             "outlined dense autofocus"
         ).classes("w-full text-[12px]")
         render_last_query_chip(instruction)
+
+        kv_ctrl = _render_kv_controls()
 
         def _focus_input() -> None:
             try:
@@ -115,37 +189,27 @@ def open_highlight_dialog(
 
         def apply_and_close() -> None:
             text = (instruction.value or "").strip()
-            _close_dialog()
+            use_kv = bool(kv_ctrl["use_kv"])
+            kv_mode = str(kv_ctrl["mode"])
+            kv_scope = str(kv_ctrl["scope"])
+            kv_library_id = str(kv_ctrl["library_id"]) or None
+            if not text and use_kv:
+                # With Knowledge Vault on, an empty instruction is a valid
+                # "just look this excerpt up" query — use the highlighted text itself
+                # rather than forcing the user to retype it.
+                text = sel
             if not text:
                 ui.notify(tr("viewer.highlight_enter_question"), color="warning")
                 return
-            remember_typed_prompt(text)
-            on_query(sel, text)
-
-        def revise_and_close() -> None:
-            text = (instruction.value or "").strip()
+            if use_kv and kv_scope == "selected" and not kv_library_id:
+                ui.notify(tr("viewer.highlight_kv_no_library"), color="warning")
+                return
             _close_dialog()
-            if not revise_allowed or on_revise is None:
-                ui.notify(tr("viewer.highlight_revise_edit_mode"), color="warning")
-                return
-            if not text:
-                ui.notify(tr("viewer.highlight_describe_change"), color="warning")
-                return
             remember_typed_prompt(text)
-            on_revise(sel, text)
-
-        def copy_selection() -> None:
-            import json
-
-            payload = json.dumps(sel)
-            ui.run_javascript(f"navigator.clipboard.writeText({payload})")
-            ui.notify(tr("chat.copy_done"), color="positive", timeout=1500)
+            on_query(sel, text, use_kv, kv_mode, kv_scope, kv_library_id)
 
         with ui.row().classes("w-full justify-end gap-2 mt-1 flex-wrap"):
             ui.button(tr("viewer.highlight_cancel"), on_click=_close_dialog).props("flat dense")
-            ui.button(tr("viewer.highlight_copy"), icon="content_copy", on_click=copy_selection).props(
-                "flat dense"
-            )
             if show_add_to_sources:
                 ui.button(tr("viewer.highlight_add_sources"), icon="input", on_click=add_source_only).props(
                     "flat dense"
@@ -153,18 +217,8 @@ def open_highlight_dialog(
             ui.button(tr("viewer.highlight_ask"), icon="send", on_click=apply_and_close).props("flat dense").classes(
                 "text-cyan-300"
             )
-            if show_revise:
-                revise_btn = ui.button(tr("viewer.highlight_revise"), on_click=revise_and_close).props(
-                    "dense color=primary"
-                )
-                if not revise_allowed or on_revise is None:
-                    revise_btn.props("flat dense")
-                    revise_btn.classes("opacity-50")
 
-        instruction.on(
-            "keydown.enter",
-            revise_and_close if (show_revise and revise_allowed) else apply_and_close,
-        )
+        instruction.on("keydown.enter", apply_and_close)
     def _on_hide() -> None:
         global _highlight_dialog_open
         _highlight_dialog_open = False

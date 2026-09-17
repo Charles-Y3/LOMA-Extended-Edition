@@ -148,7 +148,7 @@ _PRESENTATION_THUMBNAILS = {
         '<rect x="14" y="54" width="50" height="4" rx="2" fill="#c7ccd3"/>'
         "</svg>"
     ),
-    "bold_editorial": (
+    "bold": (
         '<svg viewBox="0 0 120 90" width="72" height="54" xmlns="http://www.w3.org/2000/svg">'
         '<defs><linearGradient id="loma-pres-grad" x1="0" y1="0" x2="1" y2="1">'
         '<stop offset="0" stop-color="#ffd54f"/><stop offset="1" stop-color="#e67e22"/>'
@@ -159,15 +159,15 @@ _PRESENTATION_THUMBNAILS = {
         '<rect x="14" y="78" width="40" height="4" rx="2" fill="#ffffffcc"/>'
         "</svg>"
     ),
-    "data_heavy": (
+    "insight": (
         '<svg viewBox="0 0 120 90" width="72" height="54" xmlns="http://www.w3.org/2000/svg">'
         '<rect x="2" y="2" width="116" height="86" rx="4" fill="#f5fcfc" stroke="#cdeaea"/>'
         '<rect x="14" y="16" width="50" height="7" rx="2" fill="#008080"/>'
-        '<rect x="14" y="34" width="42" height="4" rx="2" fill="#8fd4d4"/>'
-        '<rect x="14" y="44" width="36" height="4" rx="2" fill="#8fd4d4"/>'
-        '<rect x="66" y="46" width="10" height="30" fill="#40c4c4"/>'
-        '<rect x="80" y="34" width="10" height="42" fill="#008080"/>'
-        '<rect x="94" y="54" width="10" height="22" fill="#40c4c4"/>'
+        '<rect x="14" y="34" width="92" height="4" rx="2" fill="#8fd4d4"/>'
+        '<rect x="14" y="44" width="20" height="30" fill="#40c4c4"/>'
+        '<rect x="38" y="34" width="20" height="40" fill="#008080"/>'
+        '<rect x="62" y="50" width="20" height="24" fill="#40c4c4"/>'
+        '<rect x="86" y="40" width="20" height="34" fill="#008080"/>'
         "</svg>"
     ),
 }
@@ -185,18 +185,18 @@ PRESENTATION_STYLES = [
         "thumbnail_svg": _PRESENTATION_THUMBNAILS["minimal"],
     },
     {
-        "id": "bold_editorial",
-        "label_key": "presentation.style.bold_editorial.label",
-        "description_key": "presentation.style.bold_editorial.description",
-        "palette": "sunset_amber",
-        "thumbnail_svg": _PRESENTATION_THUMBNAILS["bold_editorial"],
+        "id": "insight",
+        "label_key": "presentation.style.insight.label",
+        "description_key": "presentation.style.insight.description",
+        "palette": "ocean_teal",
+        "thumbnail_svg": _PRESENTATION_THUMBNAILS["insight"],
     },
     {
-        "id": "data_heavy",
-        "label_key": "presentation.style.data_heavy.label",
-        "description_key": "presentation.style.data_heavy.description",
-        "palette": "ocean_teal",
-        "thumbnail_svg": _PRESENTATION_THUMBNAILS["data_heavy"],
+        "id": "bold",
+        "label_key": "presentation.style.bold.label",
+        "description_key": "presentation.style.bold.description",
+        "palette": "sunset_amber",
+        "thumbnail_svg": _PRESENTATION_THUMBNAILS["bold"],
     },
 ]
 
@@ -213,10 +213,10 @@ def resolve_explicit_presentation_style(user_query: str) -> str | None:
     picker and go straight to generation."""
     from pipeline.query_intent_i18n import matches
 
-    if matches(user_query, "presentation_style_bold_editorial_hints"):
-        return "bold_editorial"
-    if matches(user_query, "presentation_style_data_heavy_hints"):
-        return "data_heavy"
+    if matches(user_query, "presentation_style_bold_hints"):
+        return "bold"
+    if matches(user_query, "presentation_style_insight_hints"):
+        return "insight"
     if matches(user_query, "presentation_style_minimal_hints"):
         return "minimal"
     return None
