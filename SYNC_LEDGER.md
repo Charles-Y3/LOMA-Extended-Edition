@@ -75,7 +75,7 @@ Formslator is Core-only (Extended swaps it for News Brief):
 `review_ingest.py`, `workspace_engine.py`, `workspace_llm.py`),
 `services/office_mutation/track_changes.py`.
 (`extensions/document_editor/insert_from_chat.py` is now shared — ported to Extended
-v1.2.1 with its chat-message UI wiring + `chat.insert_*` i18n keys, no longer Core-only.)
+v0.1.0 with its chat-message UI wiring + `chat.insert_*` i18n keys, no longer Core-only.)
 
 ---
 
