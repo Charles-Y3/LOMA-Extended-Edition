@@ -118,8 +118,17 @@ def build_chat_request(
     stream: bool = False,
     extra_options: dict | None = None,
     disable_thinking: bool = False,
+    response_format: dict | None = None,
 ) -> tuple[dict[str, Any], dict[str, float]]:
-    """Kwargs for ollama.chat plus timing metadata for diagnostics."""
+    """Kwargs for ollama.chat plus timing metadata for diagnostics.
+
+    response_format, when given, is a JSON schema passed through as Ollama's
+    `format` — this constrains the SHAPE of the response (the model literally
+    cannot emit free-form prose), unlike a system-prompt instruction the model
+    can simply ignore. Confirmed: an instruction alone ("return nothing if
+    declining") got a conversational refusal sentence back instead of an empty
+    string from more than one model; the schema-constrained version reliably
+    returned an empty field instead, across every model tested."""
     if not str(model or "").strip():
         # Every LLM call in the app funnels through here — catch a missing model
         # (no provider reachable, or none downloaded) here with a clean, translated
@@ -138,6 +147,8 @@ def build_chat_request(
         "options": opts,
         "keep_alive": resolve_keep_alive(profile),
     }
+    if response_format is not None:
+        kwargs["format"] = response_format
     probe_ms = 0.0
     if disable_thinking:
         think: ThinkKwarg = False

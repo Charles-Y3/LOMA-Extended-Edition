@@ -174,6 +174,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "No image-generation model is downloaded yet. Run the setup wizard's image "
             "model step, or go to **Settings → Model Library** to download one."
         ),
+        "chat.image_explicit_declined": (
+            "This request can't be turned into an image — it describes explicit sexual "
+            "content. Try rephrasing without that part."
+        ),
         "chat.image_regen_hint_best": (
             "This used LOMA's best local image quality — there's no higher setting to "
             "try. For a different look, adjust your prompt and regenerate."
@@ -210,6 +214,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "progress.detail.execution": "Running steps…",
         "progress.detail.synthesis": "Preparing output…",
         "chat.image_generating_progress": "Generating image… step {step}/{total} ({pct}%)",
+        "chat.image_reseeding_progress": "Fixing a rendering issue — regenerating (attempt {attempt}/{total})…",
         "chat.image_generation_cancelled": "Image generation cancelled.",
         "chat.poster_generating": "Generating poster…",
         "chat.diagram_generating": "Generating diagram…",
@@ -1974,6 +1979,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "progress.detail.execution": "正在執行步驟…",
         "progress.detail.synthesis": "正在準備輸出…",
         "chat.image_generating_progress": "正在生成圖片… 第 {step}/{total} 步（{pct}%）",
+        "chat.image_reseeding_progress": "正在修正渲染問題 — 重新生成中（第 {attempt}/{total} 次嘗試）…",
         "chat.image_generation_cancelled": "已取消圖片生成。",
         "chat.poster_generating": "正在生成海報…",
         "chat.diagram_generating": "正在生成圖表…",
@@ -2997,6 +3003,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chat.copy_done": "已複製訊息",
         "chat.image_regen_hint": "不滿意嗎？可以在 **設定 → 模型** 中嘗試不同的圖像模型。",
         "chat.image_no_model_installed": "尚未下載任何影像生成模型。請執行設定精靈的影像模型步驟，或到 **設定 → 模型庫** 下載一個。",
+        "chat.image_explicit_declined": "這個請求無法生成圖片——內容涉及露骨的性內容。請移除該部分後再試一次。",
         "chat.image_regen_hint_best": "這已是 LOMA 本機可產生的最佳影像品質 — 沒有更高的設定可嘗試了。想要不同風格的話，調整提示詞後再重新生成即可。",
         "chat.image_regen_hint_try_quality_preset": "不滿意嗎？這個模型還能更清晰 — 到 **設定 → 模型庫** 將其切換為 **高品質** 模式（較慢）後再試一次。",
         "chat.image_regen_hint_try_model": "不滿意嗎？試試在 **設定 → 模型** 中換用更高階的圖像模型以獲得更好的品質。",
@@ -3724,6 +3731,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "progress.detail.execution": "正在执行步骤…",
         "progress.detail.synthesis": "正在准备输出…",
         "chat.image_generating_progress": "正在生成图片… 第 {step}/{total} 步（{pct}%）",
+        "chat.image_reseeding_progress": "正在修正渲染问题 — 重新生成中（第 {attempt}/{total} 次尝试）…",
         "chat.image_generation_cancelled": "已取消图片生成。",
         "chat.poster_generating": "正在生成海报…",
         "chat.diagram_generating": "正在生成图表…",
@@ -4747,6 +4755,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chat.copy_done": "已复制消息",
         "chat.image_regen_hint": "不满意吗？可以在 **设置 → 模型** 中尝试不同的图像模型。",
         "chat.image_no_model_installed": "尚未下载任何图像生成模型。请运行设置向导的图像模型步骤，或到 **设置 → 模型库** 下载一个。",
+        "chat.image_explicit_declined": "这个请求无法生成图片——内容涉及露骨的性内容。请移除该部分后再试一次。",
         "chat.image_regen_hint_best": "这已是 LOMA 本地可生成的最佳图像质量 — 没有更高的设置可尝试了。想要不同风格的话，调整提示词后重新生成即可。",
         "chat.image_regen_hint_try_quality_preset": "不满意吗？这个模型还能更清晰 — 到 **设置 → 模型库** 将其切换为 **高质量** 模式（较慢）后再试一次。",
         "chat.image_regen_hint_try_model": "不满意吗？试试在 **设置 → 模型** 中换用更高阶的图像模型以获得更好的质量。",
@@ -5531,6 +5540,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'progress.detail.execution': 'Ejecutando pasos…',
         'progress.detail.synthesis': 'Preparando la salida…',
         'chat.image_generating_progress': 'Generando imagen… paso {step}/{total} ({pct}%)',
+        'chat.image_reseeding_progress': 'Corrigiendo un problema de renderizado — regenerando (intento {attempt}/{total})…',
         'chat.image_generation_cancelled': 'Generación de imagen cancelada.',
         'chat.poster_generating': 'Generando póster…',
         'chat.diagram_generating': 'Generando diagrama…',
@@ -7227,6 +7237,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'progress.detail.execution': 'Schritte werden ausgeführt…',
         'progress.detail.synthesis': 'Ausgabe wird vorbereitet…',
         'chat.image_generating_progress': 'Bild wird generiert… Schritt {step}/{total} ({pct}%)',
+        'chat.image_reseeding_progress': 'Ein Renderingproblem wird behoben — Neuerstellung (Versuch {attempt}/{total})…',
         'chat.image_generation_cancelled': 'Bildgenerierung abgebrochen.',
         'chat.poster_generating': 'Poster wird generiert…',
         'chat.diagram_generating': 'Diagramm wird generiert…',

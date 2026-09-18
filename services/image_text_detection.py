@@ -76,18 +76,32 @@ def _prepare_blob(image, cv2_module, np_module):
     return blob, (w / new_w, h / new_h)
 
 
-def has_rendered_text(image, *, confidence_threshold: float = 0.5) -> bool:
-    """True when EAST detects any text-shaped region in `image` (a PIL Image) above
-    `confidence_threshold`. See module docstring for what this is/isn't appropriate for.
-    Cheap and coarse by design — a yes/no trip-wire, not a transcription."""
-    import cv2
-    import numpy as np
+# A real rendered word/line always decodes to at least one WIDE box — confirmed on
+# real generated images: every genuine text-attempt (garbled or not — neon sign,
+# cake icing, street sign) produced a box at least 25% of the image's width, while
+# EAST's other known false-positive class (a sharp, jagged, high-contrast natural
+# edge — a snow-line/rock ridge on a mountain, tested across 3 independent reseeds
+# of the same prompt; the module docstring's documented skin-texture case is
+# presumably the same root cause) never exceeded 9%. Relative to image width, not
+# an absolute pixel count, so this holds regardless of generation resolution.
+# Any single raw score above confidence_threshold alone (the old check) doesn't
+# distinguish these — a jagged terrain edge trips EAST's sigmoid map just as
+# confidently as real text, it just never decodes into a wide contiguous box.
+_MIN_TEXT_BOX_WIDTH_FRACTION = 0.12
 
-    net = _get_net()
-    blob, _scale = _prepare_blob(image, cv2, np)
-    net.setInput(blob)
-    scores, _geometry = net.forward(["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"])
-    return bool((scores[0, 0] >= confidence_threshold).any())
+
+def has_rendered_text(image, *, confidence_threshold: float = 0.5) -> bool:
+    """True when EAST detects a real text-shaped region in `image` (a PIL Image) —
+    at least one box both above `confidence_threshold` and wide enough to be an
+    actual word/line, not just a narrow high-contrast natural edge (see
+    _MIN_TEXT_BOX_WIDTH_FRACTION). See module docstring for what this is/isn't
+    appropriate for. Cheap and coarse by design — a yes/no trip-wire, not a
+    transcription."""
+    boxes = detect_text_boxes(image, confidence_threshold=confidence_threshold)
+    if not boxes:
+        return False
+    min_width = _MIN_TEXT_BOX_WIDTH_FRACTION * image.width
+    return any(w >= min_width for _x, _y, w, _h in boxes)
 
 
 def detect_text_boxes(

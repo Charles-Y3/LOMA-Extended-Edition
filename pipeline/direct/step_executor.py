@@ -2,6 +2,7 @@
 """Execute direct pipeline steps: generation, mutation, compile."""
 from __future__ import annotations
 
+import json
 import os
 import re
 from typing import Any
@@ -23,6 +24,16 @@ from pipeline.direct.prompt_hygiene import looks_like_refusal, user_step_content
 from pipeline.output_format import deliverable_display_name, EXTENSION_BY_TYPE, normalize_output_type
 
 CAPABILITY_ID = "direct_pipeline"
+
+# Schema-constrains image_prompt_author's output (see its use in
+# _run_generation_step) so the model can only ever fill or empty this one field —
+# never write free-form refusal prose that would otherwise flow straight into
+# prepare_image_prompt() as if it were a real prompt.
+_IMAGE_PROMPT_SCHEMA = {
+    "type": "object",
+    "properties": {"image_prompt": {"type": "string"}},
+    "required": ["image_prompt"],
+}
 
 # Cap on web-search grounding context injected into a presentation's system prompt
 # (see the deck_planner block below) — small enough to leave headroom for the brief
@@ -714,7 +725,32 @@ def _run_generation_step(
         "deck_planner",
     ):
         llm_opts["num_predict"] = max(int(llm_opts.get("num_predict", 2048)), 6144)
-    if stream:
+    if role_id == "image_prompt_author":
+        # Internal step, never shown live to the user — no need to stream it, which
+        # lets this use schema-constrained output instead of a system-prompt
+        # instruction. Confirmed: asking the model to "return nothing if declining"
+        # got a conversational refusal SENTENCE back instead (not empty) from more
+        # than one model, which then flowed straight into prepare_image_prompt() as
+        # if it were a real prompt. Forcing the shape to {"image_prompt": "..."}
+        # makes that failure mode structurally impossible — the model can only ever
+        # fill or empty that one field, never write free-form prose. Any parse
+        # failure or missing field is treated as a decline (empty), never as a
+        # reason to fall back to raw text — see _run_image_generation's handling of
+        # an empty body.
+        raw = generate_text_sync(
+            cfg.profile,
+            use_model,
+            messages,
+            disable_thinking=True,
+            extra_options=llm_opts,
+            response_format=_IMAGE_PROMPT_SCHEMA,
+            sink=cfg.sink,
+        )
+        try:
+            out = str(json.loads(raw).get("image_prompt") or "").strip()
+        except Exception:
+            out = ""
+    elif stream:
         streamed = stream_chat_response(
             profile=cfg.profile,
             model=use_model,
@@ -729,13 +765,6 @@ def _run_generation_step(
 
         if streamed:
             out = streamed
-        elif role_id == "image_prompt_author":
-            # Internal step — its result only ever feeds prepare_image_prompt(body or
-            # user_query) downstream, which already falls back safely to the raw user
-            # query when body is empty. state.messages[-1] is the user-facing chat
-            # bubble, not this internal step's own output — reading it here risked
-            # picking up unrelated leftover content instead of a clean empty fallback.
-            out = ""
         else:
             out = (state.messages[-1].get("content") or "").strip() if state.messages else ""
         if role_id == "translator" and out:
@@ -963,6 +992,17 @@ def _run_image_composite(
 ) -> dict[str, Any]:
     from services.image_composite import run_composite_edit
 
+    # Same reasoning as _run_image_mutation — the user's own instruction goes
+    # straight to the model with no authoring step in front of it.
+    from pipeline.image_safety_embeddings import is_explicit_prompt
+
+    if is_explicit_prompt(user_query):
+        from pipeline.i18n import t as tr
+
+        sink.set_assistant_content(tr("chat.image_explicit_declined"))
+        sink.refresh_chat()
+        return {"content": "", "path": "", "output_type": "image"}
+
     paths = _image_paths_from_bundle(bundle)
     if len(paths) < 2:
         return {"content": "", "path": "", "output_type": "image", "error": "need two images"}
@@ -1079,6 +1119,18 @@ def _run_image_mutation(
 ) -> dict[str, Any]:
     """Edit an attached image in place (img2img / inpaint / recolor / composite)."""
     from pipeline.image_mutation_dispatch import dispatch_image_mutation
+
+    # No authoring step sits in front of this path — the user's own instruction goes
+    # straight to the model, so it needs the same explicit-content gate that
+    # _run_image_generation applies to the LLM-authored prompt.
+    from pipeline.image_safety_embeddings import is_explicit_prompt
+
+    if is_explicit_prompt(user_query):
+        from pipeline.i18n import t as tr
+
+        sink.set_assistant_content(tr("chat.image_explicit_declined"))
+        sink.refresh_chat()
+        return {"content": "", "path": "", "output_type": "image"}
 
     paths = _image_paths_from_bundle(bundle)
     if not paths:
@@ -1462,7 +1514,28 @@ def _run_image_generation(
         sink.refresh_chat()
         return {"content": body, "path": "", "output_type": "image"}
 
-    prompt = prepare_image_prompt(body or user_query)
+    # No `or user_query` fallback here on purpose — image_prompt_author already omits
+    # explicit content while keeping the rest of the request (see its instructions in
+    # pipeline/direct/task_roles.py); falling back to the user's raw wording when it
+    # returns nothing would just leak whatever it declined to write straight through.
+    if not (body or "").strip():
+        from pipeline.i18n import t as tr
+
+        sink.set_assistant_content(tr("chat.image_explicit_declined"))
+        sink.refresh_chat()
+        return {"content": "", "path": "", "output_type": "image"}
+
+    prompt = prepare_image_prompt(body)
+
+    from pipeline.image_safety_embeddings import is_explicit_prompt
+
+    if is_explicit_prompt(prompt):
+        from pipeline.i18n import t as tr
+
+        sink.set_assistant_content(tr("chat.image_explicit_declined"))
+        sink.refresh_chat()
+        return {"content": "", "path": "", "output_type": "image"}
+
     from pipeline.output_format import infer_image_format_from_query
 
     image_format = infer_image_format_from_query(user_query) or "png"
@@ -1494,6 +1567,25 @@ def _run_image_generation(
                 render_progress.refresh()
 
             schedule_on_ui(_refresh)
+
+    def _on_reseed(attempt: int, total: int) -> None:
+        # Without this, the UI is left showing the previous attempt's stale
+        # "step N/N (100%)" for the whole gap between one generation finishing and
+        # the next one's first diffusion step (model reload, VRAM acquisition) —
+        # see generate_image_verified()'s on_reseed docstring.
+        from pipeline.i18n import t as tr
+        from services.session import state as _state
+        from services.session.workflow_control import schedule_on_ui
+
+        sink.log(f"Text detected — reseeding (attempt {attempt}/{total})…")
+        _state.progress_detail = tr("chat.image_reseeding_progress", attempt=attempt, total=total)
+
+        def _refresh() -> None:
+            from ui.components.process_indicator import render_progress
+
+            render_progress.refresh()
+
+        schedule_on_ui(_refresh)
 
     from services.image_generation import resolve_image_presets
     from services.image_model_prefs import get_image_model_prefs
@@ -1534,6 +1626,7 @@ def _run_image_generation(
             result, still_has_text = generate_image_verified(
                 prompt,
                 max_reseeds=2,
+                on_reseed=_on_reseed,
                 width=config.get("width") or preset_width,
                 height=config.get("height") or preset_height,
                 steps=config.get("steps") or preset_steps,

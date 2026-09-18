@@ -434,7 +434,7 @@ def compile_agentic_presentation(
         text_col = bool(text_left and use_side_image)
 
         if is_overlay_slide:
-            _add_background_image(slide, img_path, Inches)
+            _add_background_image(slide, img_path, Inches, natural_height=(bold_variant == "overlay-band"))
             if bold_variant == "overlay-band":
                 _add_overlay_band_scrim(slide, Inches)
             else:
@@ -838,9 +838,29 @@ def _set_pptx_picture_alt_text(shape, alt_text: str) -> None:
         pass
 
 
-def _add_background_image(slide, img_path: str, Inches) -> None:
+def _add_background_image(slide, img_path: str, Inches, *, natural_height: bool = False) -> None:
+    """natural_height=True (the 'overlay-band' variant) sizes the picture from its
+    own aspect ratio at full width instead of force-stretching it to 7.5" tall —
+    confirmed real bug: a diagram/chart image (wide, short — e.g. 3:1) stretched to
+    the same fixed height as a portrait-ish photo distorts it noticeably, most
+    visibly on a flowchart where the aspect change visibly enlarges the boxes and
+    can push a bottom connector out of the visible frame. 'overlay-full' (title/
+    section hero slides) keeps the original full-bleed 7.5" stretch — that variant
+    is genuinely meant to fill the whole slide behind a scrim, not preserve a
+    diagram's proportions."""
     try:
-        picture = slide.shapes.add_picture(img_path, Inches(0), Inches(0), width=Inches(10), height=Inches(7.5))
+        height_in = 7.5
+        if natural_height:
+            try:
+                from PIL import Image
+
+                with Image.open(img_path) as im:
+                    w_px, h_px = im.size
+                if w_px:
+                    height_in = min(7.5, 10.0 * h_px / w_px)
+            except Exception:
+                height_in = 7.5
+        picture = slide.shapes.add_picture(img_path, Inches(0), Inches(0), width=Inches(10), height=Inches(height_in))
         # Move the picture behind existing placeholders (index 2, after the group's
         # own nvGrpSpPr/grpSpPr) so text renders on top of it instead of hiding it.
         # `slide.shapes[-1]` re-evaluates against the *current* tree on each access —

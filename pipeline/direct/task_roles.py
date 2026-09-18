@@ -209,7 +209,13 @@ _ROLES: dict[str, ChatRole] = {
         description="Write image generation prompts.",
         system_prompt=(
             "Role: Image Prompt Author.\n"
-            "Return a vivid, concrete image generation prompt."
+            "Put a vivid, concrete image generation prompt in the image_prompt field.\n"
+            "Never describe explicit sexual content. If the user's request includes such "
+            "content alongside other legitimate content, omit only that part and still write "
+            "a complete prompt for everything else that remains (other subjects, setting, "
+            "action, style) in image_prompt. Only set image_prompt to an empty string if the "
+            "request is entirely explicit content with nothing else left to depict — never "
+            "explain the refusal in prose, only leave the field empty."
         ),
         default_contract_id="image_prompt",
     ),

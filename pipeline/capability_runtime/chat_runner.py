@@ -68,6 +68,7 @@ def _chat_call(
     sink=None,
     disable_thinking: bool = False,
     extra_options: dict | None = None,
+    response_format: dict | None = None,
 ):
     from pipeline.i18n import apply_locale_to_messages
 
@@ -79,6 +80,7 @@ def _chat_call(
         stream=stream,
         disable_thinking=disable_thinking,
         extra_options=extra_options,
+        response_format=response_format,
     )
     if sink is not None:
         sink.log(
@@ -114,6 +116,7 @@ def generate_text_sync(
     disable_thinking: bool = False,
     sink=None,
     extra_options: dict | None = None,
+    response_format: dict | None = None,
 ) -> str:
     round_messages = list(messages)
     parts: list[str] = []
@@ -126,6 +129,7 @@ def generate_text_sync(
             sink=sink,
             disable_thinking=disable_thinking,
             extra_options=extra_options,
+            response_format=response_format,
         )
         if sink is not None:
             sink.log(f"LLM response: {round((time.perf_counter() - t_call) * 1000, 1)}ms")

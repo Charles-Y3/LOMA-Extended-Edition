@@ -1369,11 +1369,20 @@ def generate_image_verified(
     output_path: str | None = None,
     *,
     max_reseeds: int = 1,
+    on_reseed: Any = None,
     **kwargs: Any,
 ) -> tuple[ImageGenerationResult, bool]:
     """generate_image(), then — for a real, non-fallback result — checks the output with
     services.image_text_detection.has_rendered_text() and reseeds up to `max_reseeds`
     times if garbled/hallucinated text is detected.
+
+    on_reseed(attempt, max_reseeds), if given, is called right before each retry
+    generation starts — the only per-attempt signal this function emits. Without it,
+    a caller showing live per-step diffusion progress has nothing to show during the
+    gap between one attempt finishing and the next attempt's first step (model
+    reload, VRAM acquisition), so the UI is left displaying the previous attempt's
+    stale "step N/N (100%)" the whole time a fresh multi-second generation is
+    actually running underneath it.
 
     Returns (final_result, still_has_text). `still_has_text` is True only when every
     attempt, including all reseeds, still had detected text — the caller decides what
@@ -1411,6 +1420,11 @@ def generate_image_verified(
         if attempt >= max_reseeds:
             return result, True
         attempt += 1
+        if on_reseed is not None:
+            try:
+                on_reseed(attempt, max_reseeds)
+            except Exception:
+                pass
         import random
 
         retry_kwargs = dict(kwargs)
