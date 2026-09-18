@@ -1064,6 +1064,20 @@ def generate_output(output_type: str, content: str, original_filename: str, gen_
             prompt_text = (state.last_image_diffusion_prompt or "").strip()
             if not prompt_text:
                 prompt_text = prepare_image_prompt(clean_text)
+                # Only the fallback branch above is genuinely unvetted — the common case
+                # reuses last_image_diffusion_prompt, which already passed this same check
+                # at original generation time (pipeline/direct/step_executor.py). Checked
+                # again here anyway since it's cheap and this is a real, separate
+                # generate_image() call site (found while auditing every such call site
+                # for the presentation-slide-image gap — see marker_visual.py's _try_photo).
+                from pipeline.image_safety_embeddings import is_explicit_prompt
+
+                if is_explicit_prompt(prompt_text):
+                    from pipeline.i18n import t as tr
+
+                    from services.image_generation import ImageGenerationDeclinedError
+
+                    raise ImageGenerationDeclinedError(tr("chat.image_explicit_declined"))
             wants_jpg = compiled_path.lower().endswith(".jpg")
             png_path = compiled_path[:-4] + ".png" if wants_jpg else compiled_path
             image_result = generate_image(

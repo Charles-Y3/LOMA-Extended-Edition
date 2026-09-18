@@ -20,6 +20,13 @@ class ImageGenerationCancelled(Exception):
     fallback-metadata file) all the way to the caller in step_executor.py."""
 
 
+class ImageGenerationDeclinedError(Exception):
+    """Raised by a prompt-authoring path (e.g. services/poster_generation.py) when
+    pipeline.image_safety_embeddings.is_explicit_prompt() flags the resolved prompt —
+    callers should catch this specifically and show its message as-is (already a
+    translated, user-facing decline message), not wrap it in a generic failure message."""
+
+
 IMAGE_MARKER_RE = re.compile(r"\[IMAGE_PROMPT:\s*(.+?)\]", re.IGNORECASE)
 _RESOLUTION_HYPE_RE = re.compile(
     r"\b(8k|4k|16k|ultra\s*hd|uhd)\s*(resolution)?\b",
@@ -122,6 +129,36 @@ ANATOMY_NEGATIVE_PROMPT = (
     "extra limbs, deformed hands, asymmetrical eyes, cross-eyed, deformed face, "
     "distorted face, long neck, disfigured"
 )
+# Narrow on purpose — nudity/explicit/pornographic terms only, not broad terms like "bare
+# skin" or "revealing clothing" that would also suppress legitimate swimwear/beach/medical
+# content. This is a soft bias (classifier-free guidance), not a hard block: it reduces
+# likelihood, it doesn't guarantee absence, especially at this app's low default guidance
+# scale (2.0-2.5) which weakens negative-prompt adherence generally. It exists specifically
+# for the class of failure pipeline/image_safety_embeddings.py's text-level check cannot
+# catch — confirmed real case: an innocuous prompt ("a serene woman meditating by a lotus
+# pond, spiritual, tranquil garden") rendered a topless figure on a presentation slide, with
+# no explicit wording anywhere in the prompt text for a text classifier to catch.
+NSFW_NEGATIVE_PROMPT = "nudity, naked, nsfw, explicit content, pornographic"
+
+
+def build_safety_negative_prompt(base: str = "") -> str:
+    """Prepends ANATOMY_NEGATIVE_PROMPT + NSFW_NEGATIVE_PROMPT ahead of any
+    caller-supplied negative-prompt text, rather than appending them after it —
+    CLIP hard-truncates at 77 tokens (confirmed: the combined always-on negative
+    prompt alone already used 65 of them), keeping the FIRST 77 and silently
+    dropping the rest with no error. Appending safety terms last (the previous
+    behavior) meant they were the first thing truncation would drop whenever a
+    caller's own negative-prompt text ran long. Every negative_prompt construction
+    site (generation, mutation/inpaint) should build through this helper rather
+    than concatenating ANATOMY_NEGATIVE_PROMPT ad hoc, so this ordering fix and any
+    future safety-term addition apply everywhere at once."""
+    parts = [ANATOMY_NEGATIVE_PROMPT, NSFW_NEGATIVE_PROMPT]
+    base = (base or "").strip().strip(",").strip()
+    if base:
+        parts.append(base)
+    return ", ".join(parts)
+
+
 # Positive-side complement to the negative "text, words, ..." suppression (above, and
 # services/marker_visual.py's own suppression) — negative prompts and positive scene-
 # framing steer through different mechanisms (subtracting vs. reinforcing a concept), so
@@ -134,6 +171,11 @@ NO_TEXT_POSITIVE_FRAMING = "pure visual scene, photographic, no text, no words"
 # it does for SD-family, so the same "extra limbs/fingers" failure mode (e.g. a group
 # high-five photo rendering a third arm) needs the positive-framing mechanism instead.
 FLUX_ANATOMY_POSITIVE_FRAMING = "anatomically correct, natural human proportions, correct number of limbs and fingers"
+# FLUX.2 Klein's own training already resists explicit content more than the SD-family
+# models do (confirmed this session), but has no negative_prompt param to carry
+# NSFW_NEGATIVE_PROMPT's suppression the way SD-family gets it — this positive-side
+# equivalent is defense-in-depth, applied everywhere FLUX_ANATOMY_POSITIVE_FRAMING is.
+FLUX_SAFETY_POSITIVE_FRAMING = "fully clothed, modest attire, safe for work"
 DEFAULT_WIDTH = int(os.environ.get("LOMA_IMAGE_WIDTH", "512"))
 DEFAULT_HEIGHT = int(os.environ.get("LOMA_IMAGE_HEIGHT", "512"))
 SDXL_DEFAULT_WIDTH = int(os.environ.get("LOMA_IMAGE_SDXL_WIDTH", "1024"))
@@ -1466,7 +1508,7 @@ def mutate_remove_text(image_path: str, prompt: str, *, model_id: str, output_pa
     family = _pipeline_kind(model_id)
     full_prompt = f"{cleaned_prompt}, {NO_TEXT_POSITIVE_FRAMING}"
     if family == "flux_klein_gguf":
-        full_prompt = f"{full_prompt}, {FLUX_ANATOMY_POSITIVE_FRAMING}"
+        full_prompt = f"{full_prompt}, {FLUX_ANATOMY_POSITIVE_FRAMING}, {FLUX_SAFETY_POSITIVE_FRAMING}"
 
     try:
         import random
@@ -1545,7 +1587,7 @@ def mutate_remove_text(image_path: str, prompt: str, *, model_id: str, output_pa
                 pipe_kwargs.update(
                     num_inference_steps=mutate_steps,
                     guidance_scale=mutate_guidance,
-                    negative_prompt=f"text, words, letters, {ANATOMY_NEGATIVE_PROMPT}",
+                    negative_prompt=build_safety_negative_prompt("text, words, letters"),
                 )
             result = run_pipe_with_progress(pipe, **pipe_kwargs)
         out = result.images[0]
@@ -1609,7 +1651,10 @@ def _run_generate_image(
             # Flux2KleinPipeline's max_sequence_length) — CLIP's 77-token compaction
             # below doesn't apply and would truncate prompts far more aggressively
             # than this encoder needs. Plenty of headroom to just append the framing.
-            clip_prompt = f"{prompt}, {NO_TEXT_POSITIVE_FRAMING}, {FLUX_ANATOMY_POSITIVE_FRAMING}"
+            clip_prompt = (
+                f"{prompt}, {NO_TEXT_POSITIVE_FRAMING}, "
+                f"{FLUX_ANATOMY_POSITIVE_FRAMING}, {FLUX_SAFETY_POSITIVE_FRAMING}"
+            )
         else:
             tokenizer = getattr(pipe, "tokenizer", None)
             if tokenizer is None and getattr(pipe, "tokenizer_2", None) is not None:
@@ -1676,8 +1721,7 @@ def _run_generate_image(
                 neg = LCM_NEGATIVE_PROMPT
             elif not neg:
                 neg = "blurry, low quality, distorted, watermark, text"
-            neg = f"{neg}, {ANATOMY_NEGATIVE_PROMPT}"
-            pipe_kwargs["negative_prompt"] = neg
+            pipe_kwargs["negative_prompt"] = build_safety_negative_prompt(neg)
 
         _agent_log(
             "generate_image params",

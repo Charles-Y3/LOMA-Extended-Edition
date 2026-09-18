@@ -10,6 +10,7 @@ from services.image_generation import (
     DEFAULT_MODEL_ID,
     GENERATED_IMAGE_DIR,
     ImageGenerationResult,
+    build_safety_negative_prompt,
     prepare_image_prompt,
     unique_output_path,
 )
@@ -459,7 +460,7 @@ def swap_subject_local(
     # visually match a real photographic background once recomposited.
     prompt = prepare_image_prompt(instruction or "edit the subject")
     prompt = f"{prompt}, photorealistic, natural lighting, detailed, high quality photo"
-    negative_prompt = (
+    negative_prompt = build_safety_negative_prompt(
         "cartoon, illustration, drawing, sticker, outline, cel shading, "
         "oversaturated, artificial, deformed, blurry, low quality"
     )
@@ -568,7 +569,7 @@ def swap_background_local(
 
     prompt = prepare_image_prompt(instruction or "change the background")
     prompt = f"{prompt}, full scene, photorealistic, natural lighting, detailed, high quality photo"
-    negative_prompt = (
+    negative_prompt = build_safety_negative_prompt(
         "cartoon, illustration, drawing, sticker, outline, cel shading, "
         "oversaturated, artificial, deformed, blurry, low quality"
     )

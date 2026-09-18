@@ -1327,12 +1327,18 @@ def _run_poster_generation(
         user_query, bundle=bundle, settings=state.current_settings, broad_trigger=True, log_fn=sink.log,
     )
     try:
+        from services.image_generation import ImageGenerationDeclinedError
         from services.poster_generation import generate_poster
 
         result = generate_poster(
             user_query, prof=prof, model=model, context=context,
             progress_cb=_make_diffusion_progress_cb(sink), template=template,
         )
+    except ImageGenerationDeclinedError as ex:
+        sink.log(f"Poster generation declined: {ex}")
+        sink.set_assistant_content(str(ex))
+        sink.refresh_chat()
+        return {"content": "", "path": "", "output_type": "image"}
     except Exception as ex:
         sink.log(f"Poster generation failed: {ex}")
         sink.set_assistant_content(f"Poster generation failed: {ex}")

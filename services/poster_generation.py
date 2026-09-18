@@ -329,6 +329,18 @@ def generate_poster(
     background_prompt = prepare_image_prompt(parts["background_prompt"])
     theme = resolve_theme(query=user_query, design={"palette": infer_palette_from_query(user_query)})
 
+    # _author_poster_text's own LLM call has no explicit-content protection of its own
+    # (unlike pipeline/direct/step_executor.py's image_prompt_author, this authoring step
+    # was never schema-constrained) — check the resolved prompt here, the same gap found
+    # and fixed for presentation slide visuals (services/marker_visual.py's _try_photo).
+    from pipeline.image_safety_embeddings import is_explicit_prompt
+
+    if is_explicit_prompt(background_prompt):
+        from pipeline.i18n import t as tr
+        from services.image_generation import ImageGenerationDeclinedError
+
+        raise ImageGenerationDeclinedError(tr("chat.image_explicit_declined"))
+
     image_model_id = get_default_image_model_from_settings()
     family = image_pipeline_kind(image_model_id)
     width, height = _POSTER_SIZE_SDXL if family == "sdxl_lightning" else _POSTER_SIZE_SD15

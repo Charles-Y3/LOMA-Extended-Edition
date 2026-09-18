@@ -245,6 +245,23 @@ def _try_photo(prompt: str, output_path: str, log_fn) -> str | None:
         deps_ok, _ = image_generation_deps_available()
         if not deps_ok:
             return None
+        # This prompt comes straight from the deck-authoring LLM's own [IMAGE:]/
+        # [IMAGE_PROMPT:] marker text — unlike the standalone chat "generate an
+        # image" path (pipeline/direct/step_executor.py's _run_image_generation),
+        # it never goes through image_prompt_author's schema-constrained authoring
+        # step, so it has none of that path's explicit-content protection. Confirmed
+        # a real miss: a slide about self-reflection/meditation authored an image
+        # description that rendered a topless figure, with nothing in the check
+        # catching it because this path had no check at all. Skipping the visual
+        # (returning None) is the right outcome here specifically — unlike the
+        # standalone chat path, a slide can go without an image entirely (see
+        # presentation_compile.py's own image_desc handling).
+        from pipeline.image_safety_embeddings import is_explicit_prompt
+
+        if is_explicit_prompt(prompt):
+            if log_fn:
+                log_fn("Skipped this slide's image — the description reads as explicit content.")
+            return None
         cleaned_prompt = _strip_text_in_image_instructions(prompt)
         if cleaned_prompt != prompt and log_fn:
             log_fn("Removed a text-in-image instruction from the marker's description before generating.")
