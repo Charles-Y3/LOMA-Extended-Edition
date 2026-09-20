@@ -39,8 +39,16 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          # setuptools>=81 removes pkg_resources' legacy Provider classes, which breaks
+          # PyInstaller's bundled pyi_rth_pkgres runtime hook — the built app crashes on
+          # launch with "AttributeError: module 'pkg_resources' has no attribute
+          # 'NullProvider'" before any app code runs (caught by build-macos's smoke-test
+          # in run 35503375100; nothing here catches it on Windows, so pin it
+          # unconditionally rather than rely on that). torch requires setuptools>=77.0.3,
+          # so both bounds must be resolved together in one pip invocation (a separate
+          # preceding `pip install setuptools<81` gets silently overridden when
+          # requirements.txt is resolved next).
+          pip install "setuptools>=77.0.3,<81" -r requirements.txt pyinstaller
 
       - name: Download bundled embedding model
         # Not committed to git (449MB single file exceeds GitHub's 100MB hard limit) —
@@ -84,8 +92,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          # See the matching comment in build-windows: setuptools>=81 breaks PyInstaller's
+          # pyi_rth_pkgres runtime hook (pkg_resources.NullProvider is gone), which is what
+          # run 35503375100's smoke-test just caught here. torch needs setuptools>=77.0.3,
+          # so both bounds are resolved in one pip invocation.
+          pip install "setuptools>=77.0.3,<81" -r requirements.txt pyinstaller
 
       - name: Download bundled embedding model
         run: |
