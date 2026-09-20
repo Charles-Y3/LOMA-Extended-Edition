@@ -14,9 +14,19 @@ on:
         description: "Release tag (e.g. v0.1.0) — leave blank to build without publishing a release"
         required: false
         default: ""
+      platform:
+        description: "Which platform(s) to build"
+        required: false
+        default: "both"
+        type: choice
+        options:
+          - both
+          - windows
+          - macos
 
 jobs:
   build-windows:
+    if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +72,7 @@ jobs:
           retention-days: 14
 
   build-macos:
+    if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'macos' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,19 +94,59 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm --clean packaging/loma_extended.spec
 
-      - name: Add LICENSE, README, and user guides to the dist folder
+      # The one failure mode a green build doesn't catch is an app that builds fine but
+      # dies on launch (SOTA's v1.2.1 shipped exactly this on Apple Silicon: the plist
+      # was edited after signing, which invalidated the ad-hoc signature, and the app
+      # died instantly with no error dialog). LOMA is a NiceGUI web-server app rather
+      # than a native window, so "launches successfully" here means "the local HTTP
+      # server actually comes up" — headless (LOMA_BROWSER_OPENED=1 stops it from trying
+      # to open a browser tab on the display-less CI runner) on a fixed, known port.
+      - name: Smoke-test the built app
         run: |
-          cp LICENSE.txt "dist/LOMA Extended Edition/LICENSE.txt"
-          cp packaging/DIST_README_EXTENDED.txt "dist/LOMA Extended Edition/README.txt"
-          cp packaging/user_guides/*.docx "dist/LOMA Extended Edition/" || true
+          export LOMA_PORT=8765
+          export LOMA_BROWSER_OPENED=1
+          "dist/LOMA Extended Edition.app/Contents/MacOS/LOMA Extended Edition" &
+          APP_PID=$!
+          ok=0
+          for i in $(seq 1 60); do
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "app process exited early"
+              exit 1
+            fi
+            if curl -sf "http://127.0.0.1:$LOMA_PORT/" >/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          kill $APP_PID 2>/dev/null || true
+          if [ "$ok" != "1" ]; then
+            echo "app did not respond on http://127.0.0.1:$LOMA_PORT/ within 60s"
+            exit 1
+          fi
+
+      - name: Verify the bundle's code signature
+        run: codesign --verify --deep --strict "dist/LOMA Extended Edition.app"
+
+      - name: Add LICENSE, README, and user guides alongside the .app
+        # The plain onedir folder ("dist/LOMA Extended Edition/") is NOT what gets
+        # zipped for macOS (see the next step — only the .app bundle is), so copying
+        # these into it (as the Windows job does) would silently ship a mac zip with no
+        # LICENSE/README at all. Stage a release folder with the .app and the docs as
+        # siblings instead, matching SOTA's macOS packaging.
+        run: |
+          mkdir -p "dist/LOMA-release"
+          cp -R "dist/LOMA Extended Edition.app" "dist/LOMA-release/"
+          cp LICENSE.txt "dist/LOMA-release/LICENSE.txt"
+          cp packaging/DIST_README_EXTENDED.txt "dist/LOMA-release/README.txt"
+          cp packaging/user_guides/*.docx "dist/LOMA-release/" || true
 
       - name: Zip the macOS .app bundle
-        # BUNDLE (in the spec) produces "LOMA Extended Edition.app" alongside the plain
-        # onedir folder — zip the .app specifically so double-clicking it in Finder works
-        # after unzipping, without the surrounding onedir clutter.
+        # ditto (not plain zip) is Apple's recommended tool for zipping .app bundles —
+        # it preserves bundle metadata/resource forks that plain `zip` can silently drop.
         run: |
           cd dist
-          zip -r -y "LOMA-Extended-Edition-macOS.zip" "LOMA Extended Edition.app"
+          ditto -c -k --keepParent "LOMA-release" "LOMA-Extended-Edition-macOS.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -106,17 +157,27 @@ jobs:
   release:
     # Only runs when a version was actually supplied — a plain build-and-inspect run (blank
     # version input) skips publishing anything, matching this workflow's existing
-    # "don't spend a release on an unverified first build" caution.
-    if: ${{ github.event.inputs.version != '' }}
+    # "don't spend a release on an unverified first build" caution. needs.*.result checks
+    # (rather than plain `needs:`) because a platform-scoped run (platform: windows/macos)
+    # leaves the other build job "skipped", not "success" — this must still proceed as long
+    # as whichever job(s) were supposed to run actually succeeded.
+    if: >
+      ${{ always() && github.event.inputs.version != '' &&
+          (needs.build-windows.result == 'success' || needs.build-macos.result == 'success') &&
+          needs.build-windows.result != 'failure' && needs.build-macos.result != 'failure' }}
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download Windows artifact
+        if: needs.build-windows.result == 'success'
+        uses: actions/download-artifact@v4
         with:
           name: LOMA-Extended-Edition-Windows
           path: release-assets
 
-      - uses: actions/download-artifact@v4
+      - name: Download macOS artifact
+        if: needs.build-macos.result == 'success'
+        uses: actions/download-artifact@v4
         with:
           name: LOMA-Extended-Edition-macOS
           path: release-assets
@@ -127,6 +188,4 @@ jobs:
           tag_name: ${{ github.event.inputs.version }}
           name: LOMA Extended Edition ${{ github.event.inputs.version }}
           draft: true
-          files: |
-            release-assets/LOMA-Extended-Edition-Windows.zip
-            release-assets/LOMA-Extended-Edition-macOS.zip
+          files: release-assets/*.zip
