@@ -105,6 +105,15 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm --clean packaging/loma_extended.spec
 
+      # Verify BEFORE the smoke-test, not after: actually launching the app can mutate
+      # the on-disk bundle enough to break its ad-hoc signature's sealed-resource manifest
+      # (confirmed in run 35503839114 — smoke-test passed, but the next step then failed
+      # with "a sealed resource is missing or invalid" because the app had run in between).
+      # Checking the pristine, never-executed bundle here means this verifies exactly what
+      # actually ships in the zip, and isn't at the mercy of what running it does to it.
+      - name: Verify the bundle's code signature
+        run: codesign --verify --deep --strict "dist/LOMA Extended Edition.app"
+
       # The one failure mode a green build doesn't catch is an app that builds fine but
       # dies on launch (SOTA's v1.2.1 shipped exactly this on Apple Silicon: the plist
       # was edited after signing, which invalidated the ad-hoc signature, and the app
@@ -112,6 +121,13 @@ jobs:
       # than a native window, so "launches successfully" here means "the local HTTP
       # server actually comes up" — headless (LOMA_BROWSER_OPENED=1 stops it from trying
       # to open a browser tab on the display-less CI runner) on a fixed, known port.
+      #
+      # run 35503839114 also showed the app respawning itself repeatedly ("Discovering
+      # extensions..." logged 4x, "address already in use", 2 orphan processes left at
+      # job cleanup) — looks like a multiprocessing spawn re-executing the frozen bundle
+      # rather than a single clean worker. Not chased down here (this step's job is
+      # launch-or-not, and it still correctly detects the first successful bind); flagged
+      # separately since it's a real app-behavior question, not a packaging/CI one.
       - name: Smoke-test the built app
         run: |
           export LOMA_PORT=8765
@@ -131,13 +147,14 @@ jobs:
             sleep 1
           done
           kill $APP_PID 2>/dev/null || true
+          # Best-effort reap of any respawned workers left bound to the port (see the
+          # comment above the step name) — a leftover process holding port 8765 open
+          # would otherwise fail the *next* CI run's bind, not just leave this one messy.
+          pkill -f "LOMA Extended Edition.app/Contents/MacOS" 2>/dev/null || true
           if [ "$ok" != "1" ]; then
             echo "app did not respond on http://127.0.0.1:$LOMA_PORT/ within 60s"
             exit 1
           fi
-
-      - name: Verify the bundle's code signature
-        run: codesign --verify --deep --strict "dist/LOMA Extended Edition.app"
 
       - name: Add LICENSE, README, and user guides alongside the .app
         # The plain onedir folder ("dist/LOMA Extended Edition/") is NOT what gets
