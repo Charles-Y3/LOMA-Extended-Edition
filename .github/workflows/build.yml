@@ -169,17 +169,22 @@ jobs:
           cp packaging/DIST_README_EXTENDED.txt "dist/LOMA-release/README.txt"
           cp packaging/user_guides/*.docx "dist/LOMA-release/" || true
 
-      - name: Zip the macOS .app bundle
-        # ditto (not plain zip) is Apple's recommended tool for zipping .app bundles —
-        # it preserves bundle metadata/resource forks that plain `zip` can silently drop.
-        run: |
-          cd dist
-          ditto -c -k --keepParent "LOMA-release" "LOMA-Extended-Edition-macOS.zip"
-
       - uses: actions/upload-artifact@v4
+        # Uploading the folder directly (not a zip we make ourselves), same fix as
+        # LOMA-Core-Edition's build.yml: downloading an artifact from the Actions UI
+        # always wraps it in its own zip for transport, so pre-zipping here (previously
+        # via ditto) produced a zip-of-a-zip that needed two rounds of extraction before
+        # a Mac user ever saw the .app. Core Edition's own macOS job has a latent bug
+        # worth knowing about if copying this further: it uploads the bare onedir folder
+        # instead of the actual "<name>.app" bundle. This path is the one staged two
+        # steps up specifically to contain the .app (not the onedir tree).
+        #
+        # NOTE: the release job below expects LOMA-Extended-Edition-macOS.zip and will
+        # need a zip step re-added here before it's used again — not needed while
+        # distributing straight from this artifact via Drive.
         with:
           name: LOMA-Extended-Edition-macOS
-          path: dist/LOMA-Extended-Edition-macOS.zip
+          path: dist/LOMA-release
           retention-days: 14
 
   release:
