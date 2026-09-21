@@ -82,6 +82,8 @@ jobs:
   build-macos:
     if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'macos' }}
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -169,23 +171,29 @@ jobs:
           cp packaging/DIST_README_EXTENDED.txt "dist/LOMA-release/README.txt"
           cp packaging/user_guides/*.docx "dist/LOMA-release/" || true
 
-      - uses: actions/upload-artifact@v4
-        # Uploading the folder directly (not a zip we make ourselves), same fix as
-        # LOMA-Core-Edition's build.yml: downloading an artifact from the Actions UI
-        # always wraps it in its own zip for transport, so pre-zipping here (previously
-        # via ditto) produced a zip-of-a-zip that needed two rounds of extraction before
-        # a Mac user ever saw the .app. Core Edition's own macOS job has a latent bug
-        # worth knowing about if copying this further: it uploads the bare onedir folder
-        # instead of the actual "<name>.app" bundle. This path is the one staged two
-        # steps up specifically to contain the .app (not the onedir tree).
-        #
-        # NOTE: the release job below expects LOMA-Extended-Edition-macOS.zip and will
-        # need a zip step re-added here before it's used again — not needed while
-        # distributing straight from this artifact via Drive.
+      - name: Zip for release upload
+        # ditto (not plain zip) is Apple's recommended tool for zipping .app bundles —
+        # it preserves bundle metadata/resource forks that plain `zip` can silently drop.
+        run: |
+          cd dist
+          ditto -c -k --keepParent "LOMA-release" "LOMA-Extended-Edition-macOS.zip"
+
+      - name: Publish to a draft Release (bypasses Actions artifact storage)
+        # actions/upload-artifact counts against Actions' own storage quota, which on
+        # this account's plan is 0.5GB total per MONTH — a single ~1GB build of this
+        # edition (torch/diffusers/transformers included) blows past that in one upload,
+        # every time, regardless of how many old artifacts get deleted first (confirmed:
+        # every run failed here even at 0 artifacts account-wide). GitHub Release assets
+        # are a separate mechanism with a much larger per-file limit and aren't counted
+        # against this quota at all. Reusing the same fixed tag on every run means this
+        # is just a drop-off point to download from and hand to Drive — not a public
+        # announcement (draft: true keeps it unlisted).
+        uses: softprops/action-gh-release@v2
         with:
-          name: LOMA-Extended-Edition-macOS
-          path: dist/LOMA-release
-          retention-days: 14
+          tag_name: dev-macos
+          name: "Dev build (macOS) — not a public release"
+          draft: true
+          files: dist/LOMA-Extended-Edition-macOS.zip
 
   release:
     # Only runs when a version was actually supplied — a plain build-and-inspect run (blank
@@ -209,7 +217,12 @@ jobs:
           path: release-assets
 
       - name: Download macOS artifact
-        if: needs.build-macos.result == 'success'
+        # build-macos no longer uploads an Actions artifact (see its own "Publish to a
+        # draft Release" step's comment — a single macOS build of this edition exceeds
+        # this account's entire monthly Actions storage quota by itself). This step will
+        # find nothing and needs reworking (e.g. pulling from the "dev-macos" release
+        # instead) before a version-tagged "both"/windows+macos release is used again.
+        if: false
         uses: actions/download-artifact@v4
         with:
           name: LOMA-Extended-Edition-macOS
