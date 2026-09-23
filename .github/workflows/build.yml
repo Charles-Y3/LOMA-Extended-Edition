@@ -107,12 +107,19 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm --clean packaging/loma_extended.spec
 
-      # Verify BEFORE the smoke-test, not after: actually launching the app can mutate
-      # the on-disk bundle enough to break its ad-hoc signature's sealed-resource manifest
-      # (confirmed in run 35503839114 — smoke-test passed, but the next step then failed
-      # with "a sealed resource is missing or invalid" because the app had run in between).
-      # Checking the pristine, never-executed bundle here means this verifies exactly what
-      # actually ships in the zip, and isn't at the mercy of what running it does to it.
+      # Root cause of the shipped .app showing "is damaged and can't be opened" on a real
+      # Mac (not just a CI-log curiosity): running LOMA's build measurably corrupts its
+      # OWN on-disk signature (run 35503839114 — smoke-test passed, then the very next
+      # codesign check failed with "a sealed resource is missing or invalid" purely from
+      # having been executed once; SOTA's simpler app doesn't do this, which is why its
+      # build ships fine with the same step order). Moving "verify" before "smoke-test"
+      # only fixed what CI *reported* — the smoke-test still ran the exact same bundle
+      # that then got zipped and shipped, so the shipped file was the corrupted one the
+      # whole time. Smoke-test a disposable COPY instead: the .app that gets verified,
+      # zipped, and shipped is never executed by CI at all.
+      - name: Copy the app for smoke-testing (never execute the one that ships)
+        run: cp -R "dist/LOMA Extended Edition.app" "dist/LOMA Extended Edition (smoketest).app"
+
       - name: Verify the bundle's code signature
         run: codesign --verify --deep --strict "dist/LOMA Extended Edition.app"
 
@@ -127,14 +134,15 @@ jobs:
       # run 35503839114 also showed the app respawning itself repeatedly ("Discovering
       # extensions..." logged 4x, "address already in use", 2 orphan processes left at
       # job cleanup) — looks like a multiprocessing spawn re-executing the frozen bundle
-      # rather than a single clean worker. Not chased down here (this step's job is
-      # launch-or-not, and it still correctly detects the first successful bind); flagged
-      # separately since it's a real app-behavior question, not a packaging/CI one.
-      - name: Smoke-test the built app
+      # rather than a single clean worker. That's very likely WHY execution corrupts the
+      # bundle's signature (a respawned worker rewriting/relinking something under its own
+      # Contents/), but it's flagged for follow-up rather than chased down here — this
+      # step now runs against the disposable copy, so it can't affect the shipped file.
+      - name: Smoke-test the built app (on the copy)
         run: |
           export LOMA_PORT=8765
           export LOMA_BROWSER_OPENED=1
-          "dist/LOMA Extended Edition.app/Contents/MacOS/LOMA Extended Edition" &
+          "dist/LOMA Extended Edition (smoketest).app/Contents/MacOS/LOMA Extended Edition" &
           APP_PID=$!
           ok=0
           for i in $(seq 1 60); do
@@ -152,7 +160,7 @@ jobs:
           # Best-effort reap of any respawned workers left bound to the port (see the
           # comment above the step name) — a leftover process holding port 8765 open
           # would otherwise fail the *next* CI run's bind, not just leave this one messy.
-          pkill -f "LOMA Extended Edition.app/Contents/MacOS" 2>/dev/null || true
+          pkill -f "LOMA Extended Edition (smoketest).app/Contents/MacOS" 2>/dev/null || true
           if [ "$ok" != "1" ]; then
             echo "app did not respond on http://127.0.0.1:$LOMA_PORT/ within 60s"
             exit 1
