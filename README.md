@@ -85,6 +85,10 @@ curl -fsSL https://raw.githubusercontent.com/Charles-Y3/LOMA-Extended-Edition/ma
 needs a paid developer certificate), so macOS blocks a browser-downloaded copy the first
 time you open it. Allow it once — no Terminal needed:
 
+0. Drag `LOMA Extended Edition.app` out of Downloads into **Applications** (or any normal
+   folder) first. LOMA works even when opened straight from Downloads, but macOS runs an
+   app opened from there from a temporary read-only copy, so moving it first is the
+   cleanest way to avoid surprises.
 1. Double-click `LOMA Extended Edition.app`. macOS says it can't verify the app — click
    **Done** (not "Move to Trash").
 2. Open **System Settings → Privacy & Security**, scroll down to the message about

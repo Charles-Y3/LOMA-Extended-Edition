@@ -100,6 +100,12 @@ from services.platform_paths import ensure_data_folder_shortcut, ensure_runtime_
 ensure_runtime_cwd()
 ensure_data_folder_shortcut()
 
+# Packages the user installed on demand (voice input, image extras, ...) live in the per-user
+# data folder, not the app folder — make them importable from the first import onward.
+from services.pip_runner import register_user_packages
+
+register_user_packages()
+
 
 def _resolve_port() -> int:
     env_port = os.environ.get("LOMA_PORT")

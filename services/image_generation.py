@@ -315,6 +315,10 @@ _SUBJECT_PRIORITY = (
 
 def _agent_log(message: str, data: dict, hypothesis_id: str, *, run_id: str = "pre-fix") -> None:
     # #region agent log
+    from pipeline.debug_session import debug_logging_enabled
+
+    if not debug_logging_enabled():
+        return  # the log path is inside the install folder (the signed .app on macOS)
     try:
         payload = {
             "sessionId": "d4eaa9",

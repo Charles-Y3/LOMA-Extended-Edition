@@ -13,7 +13,9 @@ packaged builds must do the same thing.
 from __future__ import annotations
 
 import contextlib
+import glob
 import importlib
+import os
 import runpy
 import sys
 import sysconfig
@@ -126,6 +128,57 @@ def _fixup_site_packages_path() -> None:
     importlib.invalidate_caches()
 
 
+def user_packages_prefix() -> str | None:
+    """Writable install prefix for on-demand pip installs — packaged builds only.
+
+    pip's default target is the running interpreter's own site-packages, which in a frozen
+    build is INSIDE the app folder. That folder is read-only when a browser-downloaded macOS
+    app runs under App Translocation ("[Errno 30] Read-only file system"), is code-signed
+    (writing into it invalidates the signature), and is lost on every update. A prefix under
+    the per-user data folder is writable wherever the app itself sits. `--prefix` (unlike
+    `--target`) still lets pip see packages already bundled, so it doesn't re-download them.
+    Dev runs (a normal venv) return None and keep pip's default behaviour."""
+    from services.platform_paths import is_frozen, writable_root
+
+    if not is_frozen():
+        return None
+    return os.path.join(writable_root(), "python-packages")
+
+
+def _user_site_dirs(prefix: str) -> list[str]:
+    patterns = (
+        os.path.join(prefix, "lib", "python*", "site-packages"),
+        os.path.join(prefix, "Lib", "site-packages"),
+        os.path.join(prefix, "lib", "site-packages"),
+    )
+    found: dict[str, str] = {}
+    for pat in patterns:
+        for p in glob.glob(pat):
+            if os.path.isdir(p):
+                found.setdefault(os.path.normcase(os.path.abspath(p)), p)  # "Lib" == "lib" on Windows
+    return list(found.values())
+
+
+def register_user_packages() -> None:
+    """Put packages installed by earlier runs (see user_packages_prefix) on sys.path.
+    Call at startup and after every install; a no-op outside packaged builds."""
+    prefix = user_packages_prefix()
+    if not prefix:
+        return
+    for path in _user_site_dirs(prefix):
+        if path not in sys.path:
+            sys.path.insert(0, path)
+    importlib.invalidate_caches()
+
+
+def _prefix_args() -> list[str]:
+    prefix = user_packages_prefix()
+    if not prefix:
+        return []
+    os.makedirs(prefix, exist_ok=True)
+    return ["--prefix", prefix, "--no-warn-script-location"]
+
+
 def pip_install(
     packages: list[str],
     *,
@@ -136,11 +189,13 @@ def pip_install(
         "install",
         *_LEGACY_CERTS_ARGS,
         *_NO_BUILD_ISOLATION_ARGS,
+        *_prefix_args(),
         *(extra_args or []),
         *packages,
     ]
     ok, output = run_module("pip", args, on_line=on_line)
     if ok:
+        register_user_packages()
         _fixup_site_packages_path()
     return ok, output
 
@@ -150,11 +205,14 @@ def pip_install_requirements(
     *,
     on_line: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
-    return run_module(
+    ok, output = run_module(
         "pip",
-        ["install", *_LEGACY_CERTS_ARGS, *_NO_BUILD_ISOLATION_ARGS, "-r", req_path],
+        ["install", *_LEGACY_CERTS_ARGS, *_NO_BUILD_ISOLATION_ARGS, *_prefix_args(), "-r", req_path],
         on_line=on_line,
     )
+    if ok:
+        register_user_packages()
+    return ok, output
 
 
 def pip_uninstall(

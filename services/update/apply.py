@@ -47,6 +47,13 @@ def apply_update(component_type: str, component_id: str) -> tuple[bool, str]:
     All downloads must succeed before anything is written, so a failed apply
     never leaves a component half-updated.
     """
+    from services.platform_paths import is_frozen
+
+    if is_frozen():
+        # A packaged app's code is compiled into the bundle and its folder can be read-only
+        # (macOS App Translocation) or code-signed (rewriting files invalidates the
+        # signature); patching files in place can't work there. Updates ship as a new release.
+        return False, "This packaged app updates by installing the new release, not by patching files."
     files = _component_files(component_type, component_id)
     if not files:
         return False, f"No file list found for {component_type} '{component_id}'."

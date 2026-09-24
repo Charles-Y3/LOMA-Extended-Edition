@@ -26,6 +26,10 @@ def _agent_debug_log(
     run_id: str = "pre-fix",
 ) -> None:
     # #region agent log
+    from pipeline.debug_session import debug_logging_enabled
+
+    if not debug_logging_enabled():
+        return  # the log path is inside the install folder (the signed .app on macOS)
     try:
         payload = {
             "sessionId": "d4eaa9",

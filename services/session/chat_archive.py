@@ -10,12 +10,24 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-CHAT_DIR = Path(__file__).resolve().parents[2] / "data" / "chats"
+from services.platform_paths import is_frozen, writable_root
+
+# Saved chats live in the per-user data folder (dev runs: <repo>/data/chats, the same place
+# as before). A packaged app's own folder can be read-only (macOS App Translocation) or
+# code-signed, so it must never be written to.
+CHAT_DIR = Path(writable_root()) / "data" / "chats"
+_LEGACY_CHAT_DIR = Path(__file__).resolve().parents[2] / "data" / "chats"
 INDEX_FILE = CHAT_DIR / "index.json"
 CHAT_EXTENSIONS = (".yaml", ".md")
 
 
 def _ensure_dir() -> None:
+    if is_frozen() and not CHAT_DIR.exists() and _LEGACY_CHAT_DIR.is_dir():
+        # Earlier packaged builds saved chats inside the install folder; carry them over.
+        try:
+            shutil.copytree(_LEGACY_CHAT_DIR, CHAT_DIR)
+        except OSError:
+            pass
     CHAT_DIR.mkdir(parents=True, exist_ok=True)
 
 

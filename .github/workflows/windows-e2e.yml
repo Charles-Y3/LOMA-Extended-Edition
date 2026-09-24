@@ -44,6 +44,14 @@ jobs:
           7z x LOMA-Extended-Edition-Windows.zip -oshipped -y > /dev/null
           ls "shipped/LOMA Extended Edition" | head -20
 
+      - name: Make the app folder READ-ONLY (deny writes)
+        run: |
+          # Mimics an install folder the user can't write to (e.g. under Program Files).
+          # Anything the app writes must go to %APPDATA%, never next to the exe.
+          icacls "$(cygpath -w "$PWD/shipped")" /deny "*S-1-1-0:(OI)(CI)(WD,AD,WEA,WA)" > /dev/null
+          if echo x > "shipped/should-fail" 2>/dev/null; then echo "folder is still writable!"; exit 1; fi
+          echo "app folder is read-only, as intended"
+
       - name: 1) First-run screens (chromium + firefox)
         run: |
           EXE="$PWD/shipped/LOMA Extended Edition/LOMA Extended Edition.exe"
@@ -117,4 +125,25 @@ jobs:
             taskkill //F //T //IM "LOMA Extended Edition.exe" > /dev/null 2>&1 || true
             sleep 3
           done
+          exit $fail
+
+      - name: 3) Speech step installs packages + a model from the read-only app (chromium)
+        if: always()
+        run: |
+          EXE="$PWD/shipped/LOMA Extended Edition/LOMA Extended Edition.exe"
+          H="$RUNNER_TEMP/home-voice"; mkdir -p "$H"
+          APPDATA="$(cygpath -w "$H")" LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 LOMA_E2E_WIZARD_STEP=voice             "$EXE" > "$RUNNER_TEMP/app-voice.log" 2>&1 &
+          for i in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8765/ >/dev/null && break
+            sleep 1
+          done
+          fail=0
+          python tests/e2e/voice_step_e2e.py chromium || fail=1
+          echo "--- app stdout/stderr (tail) ---"; tail -25 "$RUNNER_TEMP/app-voice.log" || true
+          echo "--- loma.log (tail) ---"; tail -30 "$H/LOMA Extended Edition/logs/loma.log" 2>/dev/null || true
+          echo "--- python-packages ---"; find "$H/LOMA Extended Edition/python-packages" -maxdepth 3 -iname "*faster_whisper*" 2>/dev/null | head
+          if grep -a -q -i -E "Access is denied|WinError 5|Errno 13|PermissionError" "$RUNNER_TEMP/app-voice.log" "$H/LOMA Extended Edition/logs/loma.log" 2>/dev/null; then
+            echo "!! the app tried to write inside its own read-only folder"; fail=1
+          fi
+          taskkill //F //T //IM "LOMA Extended Edition.exe" > /dev/null 2>&1 || true
           exit $fail

@@ -2,6 +2,7 @@
 """First-run setup wizard: connectivity, provider, vision LLM, subsystem assets."""
 from __future__ import annotations
 
+import os
 import threading
 import webbrowser
 from typing import Callable
@@ -114,7 +115,12 @@ class SetupWizard:
                 ui.label(t("setup.title")).classes("text-xl font-bold text-primary")
                 self.step_container = ui.column().classes("w-full mt-2")
                 self.dialog.open()
-                self._show_connectivity_step()
+                # CI-only: lets the end-to-end test open the wizard straight on the step that
+                # installs packages and downloads models (tests/e2e/voice_step_e2e.py).
+                if os.environ.get("LOMA_E2E_WIZARD_STEP") == "voice":
+                    self._show_voice_input_step()
+                else:
+                    self._show_connectivity_step()
         except Exception:
             SetupWizard._running = False
             raise

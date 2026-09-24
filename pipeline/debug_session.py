@@ -15,6 +15,10 @@ _SESSION = "92d406"
 _ENABLED = os.environ.get("LOMA_DEBUG_LOG", "").strip().lower() in ("1", "true", "yes")
 
 
+def debug_logging_enabled() -> bool:
+    return _ENABLED
+
+
 def debug_log(location: str, message: str, data: dict | None = None, hypothesis_id: str = "") -> None:
     if not _ENABLED:
         return
