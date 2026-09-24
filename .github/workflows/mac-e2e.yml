@@ -41,6 +41,19 @@ jobs:
           ditto -x -k LOMA-Extended-Edition-macOS.zip shipped
           ls shipped/*
 
+      - name: 0) One-line installer (packaging/install_macos.sh)
+        run: |
+          # Runs the exact script the README tells users to pipe into bash (from this
+          # checkout), against the latest published release.
+          LOMA_INSTALL_DIR="$RUNNER_TEMP/Applications" LOMA_NO_OPEN=1 bash packaging/install_macos.sh
+          APP="$RUNNER_TEMP/Applications/LOMA Extended Edition.app"
+          test -d "$APP"
+          ls "$RUNNER_TEMP/Applications/LOMA Extended Edition Docs"
+          if xattr -p com.apple.quarantine "$APP" 2>/dev/null; then
+            echo "app is quarantined after install"; exit 1
+          fi
+          echo "installed, not quarantined"
+
       - name: 1) First-run screens (chromium + webkit)
         run: |
           APP="$PWD/shipped/LOMA-release/LOMA Extended Edition.app/Contents/MacOS/LOMA Extended Edition"

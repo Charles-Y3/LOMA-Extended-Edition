@@ -73,17 +73,25 @@ the `.zip` straight from there and unzip it once — don't re-zip or re-upload i
 
 Both downloads are about 1 GB (they bundle the local AI stack and the embedding model).
 
-**First launch on macOS:** the app isn't notarized by Apple (no paid developer
-certificate), so Gatekeeper blocks it the first time. In Terminal, remove the download
-quarantine flag once, then open it normally:
+**Installing on macOS (recommended):** paste this one line into Terminal. It downloads the
+latest release straight into `~/Applications` and opens it — no Gatekeeper prompt and no
+extra steps, because files fetched this way are never quarantined by macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Charles-Y3/LOMA-Extended-Edition/main/packaging/install_macos.sh | bash
+```
+
+**Installing from the downloaded zip instead:** the app isn't notarized by Apple (that
+needs a paid developer certificate), so a browser-downloaded copy is blocked by Gatekeeper
+until you clear the download flag once:
 
 ```bash
 xattr -cr "/path/to/LOMA Extended Edition.app"
 ```
 
-(or right-click / Control-click the app → **Open** → **Open**). If macOS instead says the
-app is "damaged and can't be opened", re-download it directly from the Releases page and
-run the same `xattr` command before opening. It's a one-time step per download.
+(or right-click / Control-click the app → **Open** → **Open**). If macOS says the app is
+"damaged and can't be opened", that's the same flag — run the `xattr` command, or use the
+one-line install above.
 
 **Intel Mac:** the packaged build is Apple Silicon only. Use Option B (run from source)
 instead.
