@@ -68,6 +68,8 @@ case "$NAME" in
     s="$(find "$H/.cache" "$ROOT" -iname '*sensevoice*' 2>/dev/null | head -1)"
     if [ -n "$s" ]; then echo "ok: SenseVoice files at $s"; else echo "!! no SenseVoice model files found"; fail=1; fi ;;
   image)
+    m="$(find "$H/.cache/huggingface" -iname '*tiny-stable-diffusion*' 2>/dev/null | head -1)"
+    if [ -n "$m" ]; then echo "ok: tiny model downloaded by the app: $m"; else echo "!! tiny model not in the Hugging Face cache"; fail=1; fi
     g="$(find "$ROOT/data" -iname '*.png' 2>/dev/null | head -1)"
     if [ -n "$g" ]; then echo "ok: generated image $g ($(du -h "$g" | cut -f1))"; else echo "!! no generated .png under $ROOT/data"; fail=1; fi ;;
   *) echo "(none for $NAME)" ;;

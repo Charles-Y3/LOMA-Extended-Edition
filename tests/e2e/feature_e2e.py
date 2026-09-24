@@ -177,8 +177,16 @@ def feat_image(page) -> None:
     wait_body(page, "Step 6: Image generation model", 240)
     page.locator(".q-checkbox", has_text=model_label).first.click()
     page.locator("button", has_text="Download & Finish").click()
-    wait_body(page, "Download complete", 600, fail_if="Image model download failed")
-    print("tiny image model downloaded through the app's own download path")
+    # "Download complete" is a toast that vanishes as the wizard closes; the wizard closing is
+    # the reliable signal (a failed download keeps it open and reports the failure).
+    deadline = time.time() + 600
+    while time.time() < deadline and page.locator(".loma-setup-wizard").count() > 0:
+        if "Image model download failed" in body(page) or "some_failed" in body(page):
+            raise AssertionError("image model download failed")
+        time.sleep(3)
+    if page.locator(".loma-setup-wizard").count() > 0:
+        raise AssertionError("wizard never finished the image model download")
+    print("tiny image model downloaded through the app's own download path; wizard closed")
     open_workspace(page)
     before = page.locator("img").count()
     send_chat(page, "Generate an image of a red apple on a table.", timeout_s=600)
