@@ -48,6 +48,9 @@ fi
 
 echo "--- app stdout/stderr (tail) ---"; tail -25 "$RUNNER_TEMP/app-$NAME.log" | grep -v "Downloading bytes" || true
 echo "--- loma.log (tail) ---"; tail -30 "$ROOT/logs/loma.log" 2>/dev/null || true
+echo "--- ollama server log (tail) ---"; tail -25 "$RUNNER_TEMP/ollama.log" 2>/dev/null || true
+echo "--- ollama ps ---"; curl -s http://127.0.0.1:11434/api/ps 2>/dev/null | head -c 600; echo
+echo "--- memory ---"; vm_stat | head -6; top -l 1 -n 6 -o mem -stats pid,command,mem 2>/dev/null | tail -8 || true
 if grep -a -q -E "Read-only file system|Errno 30" "$RUNNER_TEMP/app-$NAME.log" "$ROOT/logs/loma.log" 2>/dev/null; then
   echo "!! the app tried to write inside its own read-only folder"; fail=1
 fi

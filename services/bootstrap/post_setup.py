@@ -42,12 +42,19 @@ def _run_on_client(callback, *, label: str = "post-setup") -> None:
             from nicegui import app
 
             clients = list(app.clients())
-            if not clients:
+            # app.clients() lists the OLDEST page first, and a page the user already left (the
+            # first-run language screen, a reload) lingers there for a few seconds with no
+            # connection. Sending the reload to clients[0] then left the live page stuck on
+            # "Setup complete — reloading workspace…" with the wizard still open. Only pages
+            # that are actually connected can act on it.
+            live = [c for c in clients if getattr(c, "has_socket_connection", False)]
+            targets = live or clients
+            if not targets:
                 print(f"[LOMA Setup] {label}: no browser client connected")
                 return
-            client = clients[0]
-            with client:
-                callback(client)
+            for client in targets:
+                with client:
+                    callback(client)
         except Exception as exc:
             print(f"[LOMA Setup] {label} failed: {exc}")
 
