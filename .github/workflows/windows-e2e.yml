@@ -1,0 +1,120 @@
+name: Windows end-to-end test
+
+# Windows twin of mac-e2e.yml: runs the SHIPPED Windows release asset (downloaded from
+# GitHub Releases, not rebuilt) on a real Windows runner and drives it through Chromium
+# and Firefox with Playwright.
+#   1. first-run screens: language gate -> setup wizard must report ONLINE, and must come
+#      back after a page reload
+#   2. chat: with a tiny local Ollama model, a real message must get a real streamed reply
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose Windows zip to test"
+        required: false
+        default: "v1.0.0"
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: write   # lets `gh release download` see a not-yet-published draft release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+      CHAT_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright browsers
+        run: |
+          pip install playwright
+          python -m playwright install chromium firefox
+
+      - name: Download and unzip the shipped app
+        run: |
+          gh release download "$TAG" --repo "${{ github.repository }}" -p LOMA-Extended-Edition-Windows.zip
+          7z x LOMA-Extended-Edition-Windows.zip -oshipped -y > /dev/null
+          ls "shipped/LOMA Extended Edition" | head -20
+
+      - name: 1) First-run screens (chromium + firefox)
+        run: |
+          EXE="$PWD/shipped/LOMA Extended Edition/LOMA Extended Edition.exe"
+          fail=0
+          for engine in chromium firefox; do
+            echo "=== $engine ==="
+            H="$RUNNER_TEMP/home-wizard-$engine"; mkdir -p "$H"
+            # Fresh user data: the app keeps everything under %APPDATA%\LOMA Extended Edition.
+            APPDATA="$(cygpath -w "$H")" LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 \
+              "$EXE" > "$RUNNER_TEMP/app-wizard-$engine.log" 2>&1 &
+            for i in $(seq 1 120); do
+              curl -sf http://127.0.0.1:8765/ >/dev/null && break
+              sleep 1
+            done
+            python tests/e2e/mac_wizard_e2e.py "$engine" || fail=1
+            echo "--- app stdout/stderr (tail) ---"; tail -20 "$RUNNER_TEMP/app-wizard-$engine.log" || true
+            echo "--- loma.log (tail) ---"
+            tail -30 "$H/LOMA Extended Edition/logs/loma.log" 2>/dev/null || true
+            echo "app processes: $(tasklist //FI 'IMAGENAME eq LOMA Extended Edition.exe' | grep -c 'LOMA Extended')"
+            taskkill //F //T //IM "LOMA Extended Edition.exe" > /dev/null 2>&1 || true
+            sleep 3
+          done
+          exit $fail
+
+      - name: Install Ollama and a tiny chat model
+        if: always()
+        run: |
+          curl -fsSL -o ollama.zip https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip
+          7z x ollama.zip -oollama -y > /dev/null
+          (./ollama/ollama.exe serve > "$RUNNER_TEMP/ollama.log" 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:11434/api/tags >/dev/null && break
+            sleep 1
+          done
+          ./ollama/ollama.exe pull "$CHAT_MODEL"
+          ./ollama/ollama.exe list
+
+      - name: 2) Chat (chromium + firefox)
+        if: always()
+        run: |
+          EXE="$PWD/shipped/LOMA Extended Edition/LOMA Extended Edition.exe"
+          fail=0
+          for engine in chromium firefox; do
+            echo "=== chat: $engine ==="
+            H="$RUNNER_TEMP/home-chat-$engine"
+            ROOT="$H/LOMA Extended Edition"
+            mkdir -p "$ROOT/data"
+            # Skip the wizard: language picked, setup completed against the local Ollama,
+            # and every model role pointed at the tiny model just pulled.
+            python - "$ROOT/data/settings.json" "$CHAT_MODEL" <<'PY'
+          import json, sys
+          path, model = sys.argv[1], sys.argv[2]
+          json.dump({
+              "language": "en",
+              "assignments": {r: model for r in ("Orchestrator", "Specialist", "General", "Verifier")},
+              "setup": {"completed": True, "provider": "ollama", "provider_url": "http://127.0.0.1:11434",
+                        "skipped_steps": [], "installed_assets": {}, "language_picked": True},
+          }, open(path, "w"), indent=4)
+          PY
+            APPDATA="$(cygpath -w "$H")" LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 \
+              "$EXE" > "$RUNNER_TEMP/app-chat-$engine.log" 2>&1 &
+            for i in $(seq 1 120); do
+              curl -sf http://127.0.0.1:8765/ >/dev/null && break
+              sleep 1
+            done
+            python tests/e2e/mac_chat_e2e.py "$engine" || fail=1
+            echo "--- app stdout/stderr (tail) ---"; tail -20 "$RUNNER_TEMP/app-chat-$engine.log" || true
+            echo "--- loma.log (tail) ---"
+            tail -30 "$ROOT/logs/loma.log" 2>/dev/null || true
+            echo "app processes: $(tasklist //FI 'IMAGENAME eq LOMA Extended Edition.exe' | grep -c 'LOMA Extended')"
+            taskkill //F //T //IM "LOMA Extended Edition.exe" > /dev/null 2>&1 || true
+            sleep 3
+          done
+          exit $fail

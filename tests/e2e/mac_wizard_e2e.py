@@ -58,6 +58,13 @@ def main(engine: str) -> int:
             _wait_body_contains(page, "You are online", 90, fail_if="You appear offline")
             print(f"[{engine}] wizard reports ONLINE")
 
+            # A page reload while the wizard is open used to leave the new page with no
+            # wizard at all (the server thought it was still running for the old page).
+            page.reload(wait_until="domcontentloaded", timeout=120_000)
+            _wait_body_contains(page, "Step 1: Network connectivity", 180)
+            _wait_body_contains(page, "You are online", 90, fail_if="You appear offline")
+            print(f"[{engine}] wizard came back after a page reload")
+
             page.locator("button", has_text="Continue").last.click()
             _wait_body_contains(page, "Step 2: Choose LLM provider", 60)
             print(f"[{engine}] advanced to provider step")
