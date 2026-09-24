@@ -42,6 +42,7 @@ def wait_body(page, needle: str, timeout_s: float, fail_if: str | None = None) -
 
 
 def click_language_gate(page) -> None:
+    page.goto(URL, wait_until="domcontentloaded", timeout=120_000)
     page.wait_for_selector(".loma-language-gate", timeout=120_000)
     page.locator(".loma-language-gate button").click()
 
@@ -223,7 +224,23 @@ def feat_research(page) -> None:
     wait_body(page, "Confirm or edit", 300, fail_if="Clarify plan failed")
     print("clarify questions were drafted")
     page.locator("button", has_text="Start research").first.click()
-    wait_body(page, "Research complete", 1200, fail_if="Research failed")
+    # The runner has 3 CPUs and the test model is tiny but CPU-only, so the LLM steps (credibility
+    # ranking of each source, then synthesis) are slow: allow 45 min and log progress so a stall
+    # can be told apart from slowness.
+    deadline, last_log = time.time() + 2700, 0.0
+    while time.time() < deadline:
+        text = body(page)
+        if "research complete" in text.lower():
+            break
+        if "research failed" in text.lower():
+            raise AssertionError("research reported a failure")
+        if time.time() - last_log > 240:
+            lines = [l for l in panel_text(page).splitlines() if l.strip()]
+            print(f"  [{int(2700 - (deadline - time.time()))}s] research progress: {' | '.join(lines[-3:])[:220]}")
+            last_log = time.time()
+        time.sleep(5)
+    else:
+        raise AssertionError("research did not complete within 45 minutes")
     print("research ran (web search + synthesis) and completed")
     wait_body(page, "Regenerate", 60)
     print("results screen is showing")
