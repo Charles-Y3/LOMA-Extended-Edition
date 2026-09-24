@@ -60,8 +60,10 @@ case "$NAME" in
   voice_reply)
     v="$(find "$ROOT/tts/piper_voices" -name '*.onnx' 2>/dev/null | head -1)"
     if [ -n "$v" ]; then echo "ok: Piper voice $v ($(du -h "$v" | cut -f1))"; else echo "!! no Piper voice file under $ROOT/tts/piper_voices"; fail=1; fi
-    p="$(find "$ROOT/python-packages" -maxdepth 5 -iname 'piper*' 2>/dev/null | head -1)"
-    if [ -n "$p" ]; then echo "ok: piper package installed at $p"; else echo "!! piper-tts not under python-packages"; fail=1; fi ;;
+    # piper-tts is bundled in the app, so pip has nothing to install for it; just list what (if
+    # anything) landed in the user's package folder.
+    echo "python-packages: $(ls "$ROOT/python-packages/lib/"*/site-packages 2>/dev/null | head -8 | tr '
+' ' ')" ;;
   sensevoice)
     s="$(find "$H/.cache" "$ROOT" -iname '*sensevoice*' 2>/dev/null | head -1)"
     if [ -n "$s" ]; then echo "ok: SenseVoice files at $s"; else echo "!! no SenseVoice model files found"; fail=1; fi ;;
