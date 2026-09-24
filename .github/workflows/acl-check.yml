@@ -1,0 +1,40 @@
+name: Windows read-only folder check
+
+# Quick diagnostic (~1 min) for windows-e2e.yml's "make the app folder read-only" step: which
+# icacls recipe actually stops a normal process from creating files on windows-latest.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  acl:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Try recipes
+        run: |
+          export MSYS_NO_PATHCONV=1
+          who="$(whoami)"; echo "running as: $who"
+          try() {
+            name="$1"; shift
+            d="$RUNNER_TEMP/acl-$name"; rm -rf "$d"; mkdir -p "$d/sub"
+            echo "=== $name"
+            "$@" "$(cygpath -w "$d")" || echo "(icacls exited $?)"
+            icacls "$(cygpath -w "$d")"
+            python - "$d" <<'PY'
+          import sys, os
+          d = sys.argv[1]
+          for target in (os.path.join(d, "new.txt"), os.path.join(d, "sub", "new.txt")):
+              try:
+                  open(target, "w").write("x"); print("  python: WROTE", os.path.basename(os.path.dirname(target)) or "")
+              except OSError as e:
+                  print("  python: blocked ->", type(e).__name__)
+          PY
+          }
+          A() { icacls "$1" /deny "*S-1-1-0:(OI)(CI)(WD,AD,WEA,WA)"; }
+          B() { icacls "$1" /deny "Everyone:(OI)(CI)(W)"; }
+          C() { icacls "$1" /inheritance:r /grant:r "*S-1-1-0:(OI)(CI)(RX)"; }
+          D() { icacls "$1" /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)(RX)" "*S-1-1-0:(OI)(CI)(RX)"; }
+          for r in A B C D; do
+            try "$r" "$r" ; done
