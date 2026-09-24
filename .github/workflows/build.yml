@@ -147,7 +147,7 @@ jobs:
       # whole time. Smoke-test a disposable COPY instead: the .app that gets verified,
       # zipped, and shipped is never executed by CI at all.
       - name: Copy the app for smoke-testing (never execute the one that ships)
-        run: cp -R "dist/LOMA Extended Edition.app" "dist/LOMA Extended Edition (smoketest).app"
+        run: cp -R "dist/LOMA Extended Edition.app" "dist/smoketest-LOMA.app"
 
       - name: Verify the bundle's code signature
         run: codesign --verify --deep --strict "dist/LOMA Extended Edition.app"
@@ -171,7 +171,8 @@ jobs:
         run: |
           export LOMA_PORT=8765
           export LOMA_BROWSER_OPENED=1
-          "dist/LOMA Extended Edition (smoketest).app/Contents/MacOS/LOMA Extended Edition" &
+          export LOMA_SELFTEST=1
+          "dist/smoketest-LOMA.app/Contents/MacOS/LOMA Extended Edition" &
           APP_PID=$!
           ok=0
           for i in $(seq 1 60); do
@@ -185,15 +186,29 @@ jobs:
             fi
             sleep 1
           done
+          selftest=""
+          if [ "$ok" = "1" ]; then
+            # The CI runner is a real Apple Silicon Mac: prove the frozen app can make a
+            # verified HTTPS request (the exact failure a Mac user hit — the wizard said
+            # "Offline" because stdlib urllib had no CA bundle) and log how many copies of
+            # the app are running (a respawn regression shows up as a count > 2).
+            selftest=$(curl -s --max-time 40 "http://127.0.0.1:$LOMA_PORT/loma-selftest" || true)
+            echo "selftest response: $selftest"
+            echo "app processes: $(pgrep -fc 'smoketest-LOMA.app/Contents/MacOS' || true)"
+          fi
           kill $APP_PID 2>/dev/null || true
           # Best-effort reap of any respawned workers left bound to the port (see the
           # comment above the step name) — a leftover process holding port 8765 open
           # would otherwise fail the *next* CI run's bind, not just leave this one messy.
-          pkill -f "LOMA Extended Edition (smoketest).app/Contents/MacOS" 2>/dev/null || true
+          pkill -f "smoketest-LOMA.app/Contents/MacOS" 2>/dev/null || true
           if [ "$ok" != "1" ]; then
             echo "app did not respond on http://127.0.0.1:$LOMA_PORT/ within 60s"
             exit 1
           fi
+          case "$selftest" in
+            *'"online":true'*) ;;
+            *) echo "frozen app could not make a verified HTTPS request: $selftest"; exit 1 ;;
+          esac
 
       - name: Add LICENSE, README, and user guides alongside the .app
         # The plain onedir folder ("dist/LOMA Extended Edition/") is NOT what gets

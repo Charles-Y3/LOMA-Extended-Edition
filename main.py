@@ -389,6 +389,17 @@ async def loma_open_path(body: _OpenPathRequest) -> dict:
     return {"ok": True}
 
 
+if os.environ.get("LOMA_SELFTEST") == "1":
+    # CI-only (build.yml's smoke test sets this): lets the workflow prove on a real macOS
+    # runner that the frozen app can actually make verified HTTPS requests.
+    @app.get("/loma-selftest")
+    def loma_selftest() -> dict:
+        from services.bootstrap.connectivity import check_connectivity
+
+        conn = check_connectivity()
+        return {"online": conn.online, "reason": conn.reason}
+
+
 @ui.page("/")
 def index() -> None:
     from ui.branding import favicon_for_nicegui
