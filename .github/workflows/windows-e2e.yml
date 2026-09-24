@@ -48,7 +48,8 @@ jobs:
         run: |
           # Mimics an install folder the user can't write to (e.g. under Program Files).
           # Anything the app writes must go to %APPDATA%, never next to the exe.
-          icacls "$(cygpath -w "$PWD/shipped")" /deny "*S-1-1-0:(OI)(CI)(WD,AD,WEA,WA)" > /dev/null
+          # MSYS_NO_PATHCONV: Git Bash would otherwise rewrite "/deny" into a Windows path.
+          MSYS_NO_PATHCONV=1 icacls "$(cygpath -w "$PWD/shipped")" /deny "*S-1-1-0:(OI)(CI)(WD,AD,WEA,WA)" > /dev/null
           if echo x > "shipped/should-fail" 2>/dev/null; then echo "folder is still writable!"; exit 1; fi
           echo "app folder is read-only, as intended"
 
