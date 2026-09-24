@@ -82,16 +82,20 @@ curl -fsSL https://raw.githubusercontent.com/Charles-Y3/LOMA-Extended-Edition/ma
 ```
 
 **Installing from the downloaded zip instead:** the app isn't notarized by Apple (that
-needs a paid developer certificate), so a browser-downloaded copy is blocked by Gatekeeper
-until you clear the download flag once:
+needs a paid developer certificate), so macOS blocks a browser-downloaded copy the first
+time you open it. Allow it once — no Terminal needed:
 
-```bash
-xattr -cr "/path/to/LOMA Extended Edition.app"
-```
+1. Double-click `LOMA Extended Edition.app`. macOS says it can't verify the app — click
+   **Done** (not "Move to Trash").
+2. Open **System Settings → Privacy & Security**, scroll down to the message about
+   "LOMA Extended Edition" being blocked, and click **Open Anyway**. Confirm with your
+   password if asked.
+3. Open the app again and click **Open**. It opens normally from then on.
 
-(or right-click / Control-click the app → **Open** → **Open**). If macOS says the app is
-"damaged and can't be opened", that's the same flag — run the `xattr` command, or use the
-one-line install above.
+(On older macOS versions, right-click / Control-click the app → **Open** → **Open** does the
+same thing.) Terminal alternative: `xattr -cr "/path/to/LOMA Extended Edition.app"`, then
+open it. If macOS says the app is "damaged and can't be opened", that's the same block —
+use one of these methods, or the one-line install above.
 
 **Intel Mac:** the packaged build is Apple Silicon only. Use Option B (run from source)
 instead.
