@@ -1,9 +1,11 @@
 name: macOS end-to-end test
 
 # Runs the SHIPPED macOS release asset (downloaded from GitHub Releases, not rebuilt) on a
-# real Apple Silicon runner and drives its first-run screens through Chromium and WebKit
-# (Safari's engine) — the closest thing to "a Mac user tried it" that doesn't need a Mac
-# user. Cheap (no PyInstaller build), so it's safe to iterate on.
+# real Apple Silicon runner and drives it through Chromium and WebKit (Safari's engine) —
+# the closest thing to "a Mac user tried it" that doesn't need a Mac user. Cheap (no
+# PyInstaller build), so it's safe to iterate on.
+#   1. first-run screens: language gate -> setup wizard must report ONLINE
+#   2. chat: with a tiny local Ollama model, a real message must get a real streamed reply
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.event.inputs.tag }}
+      CHAT_MODEL: qwen2.5:0.5b
     steps:
       - uses: actions/checkout@v4
 
@@ -38,27 +41,79 @@ jobs:
           ditto -x -k LOMA-Extended-Edition-macOS.zip shipped
           ls shipped/*
 
-      - name: Drive the first-run screens (chromium + webkit)
+      - name: 1) First-run screens (chromium + webkit)
         run: |
           APP="$PWD/shipped/LOMA-release/LOMA Extended Edition.app/Contents/MacOS/LOMA Extended Edition"
           fail=0
           for engine in chromium webkit; do
             echo "=== $engine ==="
-            H="$RUNNER_TEMP/home-$engine"; mkdir -p "$H"
+            H="$RUNNER_TEMP/home-wizard-$engine"; mkdir -p "$H"
             # Mimic a Finder launch: fresh user data and Finder's minimal PATH/environment
             # (no Homebrew, no SSL_CERT_FILE, no LOMA_SELFTEST route).
             env -i HOME="$H" PATH=/usr/bin:/bin:/usr/sbin:/sbin LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 \
-              "$APP" > "$RUNNER_TEMP/app-$engine.log" 2>&1 &
+              "$APP" > "$RUNNER_TEMP/app-wizard-$engine.log" 2>&1 &
             APP_PID=$!
             for i in $(seq 1 90); do
               curl -sf http://127.0.0.1:8765/ >/dev/null && break
               sleep 1
             done
             python tests/e2e/mac_wizard_e2e.py "$engine" || fail=1
-            echo "--- app stdout/stderr (tail) ---"; tail -20 "$RUNNER_TEMP/app-$engine.log" || true
+            echo "--- app stdout/stderr (tail) ---"; tail -20 "$RUNNER_TEMP/app-wizard-$engine.log" || true
             echo "--- loma.log (tail) ---"
             tail -30 "$H/Library/Application Support/LOMA Extended Edition/logs/loma.log" 2>/dev/null || true
-            echo "app processes: $(pgrep -fc 'LOMA-release/LOMA Extended Edition.app/Contents/MacOS' || true)"
+            echo "app processes: $(pgrep -f 'LOMA-release/LOMA Extended Edition.app/Contents/MacOS' | wc -l)"
+            kill $APP_PID 2>/dev/null || true
+            pkill -f "LOMA-release/LOMA Extended Edition.app/Contents/MacOS" 2>/dev/null || true
+            sleep 3
+          done
+          exit $fail
+
+      - name: Install Ollama and a tiny chat model
+        if: always()
+        run: |
+          brew install ollama
+          (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:11434/api/tags >/dev/null && break
+            sleep 1
+          done
+          ollama pull "$CHAT_MODEL"
+          ollama list
+
+      - name: 2) Chat (chromium + webkit)
+        if: always()
+        run: |
+          APP="$PWD/shipped/LOMA-release/LOMA Extended Edition.app/Contents/MacOS/LOMA Extended Edition"
+          fail=0
+          for engine in chromium webkit; do
+            echo "=== chat: $engine ==="
+            H="$RUNNER_TEMP/home-chat-$engine"
+            ROOT="$H/Library/Application Support/LOMA Extended Edition"
+            mkdir -p "$ROOT/data"
+            # Skip the wizard: language picked, setup completed against the local Ollama,
+            # and every model role pointed at the tiny model just pulled.
+            python - "$ROOT/data/settings.json" "$CHAT_MODEL" <<'PY'
+          import json, sys
+          path, model = sys.argv[1], sys.argv[2]
+          json.dump({
+              "language": "en",
+              "assignments": {r: model for r in ("Orchestrator", "Specialist", "General", "Verifier")},
+              "setup": {"completed": True, "provider": "ollama", "provider_url": "http://127.0.0.1:11434",
+                        "skipped_steps": [], "installed_assets": {}, "language_picked": True},
+          }, open(path, "w"), indent=4)
+          PY
+            env -i HOME="$H" PATH=/usr/bin:/bin:/usr/sbin:/sbin LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 \
+              "$APP" > "$RUNNER_TEMP/app-chat-$engine.log" 2>&1 &
+            APP_PID=$!
+            for i in $(seq 1 90); do
+              curl -sf http://127.0.0.1:8765/ >/dev/null && break
+              sleep 1
+            done
+            python tests/e2e/mac_chat_e2e.py "$engine" || fail=1
+            echo "--- app stdout/stderr (tail) ---"; tail -20 "$RUNNER_TEMP/app-chat-$engine.log" || true
+            echo "--- loma.log (tail) ---"
+            tail -30 "$ROOT/logs/loma.log" 2>/dev/null || true
+            echo "app processes: $(pgrep -f 'LOMA-release/LOMA Extended Edition.app/Contents/MacOS' | wc -l)"
             kill $APP_PID 2>/dev/null || true
             pkill -f "LOMA-release/LOMA Extended Edition.app/Contents/MacOS" 2>/dev/null || true
             sleep 3

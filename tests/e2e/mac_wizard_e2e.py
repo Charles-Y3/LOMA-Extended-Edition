@@ -41,6 +41,8 @@ def main(engine: str) -> int:
         page = browser.new_page()
         page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
         page.on("console", lambda m: errors.append(f"console: {m.text}") if m.type == "error" else None)
+        failed_urls: list[str] = []
+        page.on("requestfailed", lambda r: failed_urls.append(r.url))
         try:
             page.goto(URL, wait_until="domcontentloaded", timeout=120_000)
 
@@ -65,6 +67,19 @@ def main(engine: str) -> int:
             print(_body(page)[:3000])
             print("--- browser errors ---")
             print("\n".join(errors[:30]))
+            print("--- failed request URLs (unique) ---")
+            print("\n".join(sorted(set(failed_urls))[:15]) or "(none)")
+            # Diagnostic: is the wizard merely stuck on a page that has since reloaded?
+            # If a manual reload brings it back, the app is fine; if not, the server thinks
+            # the wizard is already running and never re-shows it.
+            try:
+                page.reload(wait_until="domcontentloaded", timeout=60_000)
+                time.sleep(25)
+                print("--- after manual reload ---")
+                print("wizard visible:", "Step 1: Network connectivity" in _body(page))
+                print(_body(page)[:600])
+            except Exception as reload_exc:
+                print(f"reload diagnostic failed: {reload_exc}")
             browser.close()
             return 1
         print("--- browser errors (informational) ---")
