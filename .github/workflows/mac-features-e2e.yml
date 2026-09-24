@@ -7,7 +7,8 @@ name: macOS feature tests (extended)
 #
 #   quick:  chat_archive, extensions_smoke, vault, voice_reply
 #   heavy:  sensevoice (~1 GB model), image (tiny Stable-Diffusion test model — the real catalog
-#           models need more RAM than a 7 GB runner has), news_brief + research (live web + LLM)
+#           models need more RAM than a 7 GB runner has), news_brief (live web + LLM)
+#   opt-in: research (name it explicitly; it can stall 45+ min on a 3-CPU runner)
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +17,7 @@ on:
         required: false
         default: "v1.0.0"
       features:
-        description: "all | quick | heavy | comma list (chat_archive,extensions_smoke,vault,voice_reply,sensevoice,image,news_brief,research)"
+        description: "all | quick | heavy | comma list (chat_archive,extensions_smoke,vault,voice_reply,sensevoice,image,news_brief; research only if named)"
         required: false
         default: "all"
 
@@ -62,7 +63,9 @@ jobs:
         id: pick
         run: |
           f="$FEATURES"
-          want() { case ",$f," in *",all,"*|*",$1,"*) return 0;; esac; case "$f" in quick) case "$1" in chat_archive|extensions_smoke|vault|voice_reply) return 0;; esac;; heavy) case "$1" in sensevoice|image|news_brief|research) return 0;; esac;; esac; return 1; }
+          # research is opt-in only (name it explicitly): on the 3-CPU runner it can sit 45+ min on one
+          # LLM call, and the owner chose not to track it. all/quick/heavy therefore skip it.
+          want() { case ",$f," in *",$1,"*) return 0;; esac; [ "$1" = "research" ] && return 1; case ",$f," in *",all,"*) return 0;; esac; case "$f" in quick) case "$1" in chat_archive|extensions_smoke|vault|voice_reply) return 0;; esac;; heavy) case "$1" in sensevoice|image|news_brief) return 0;; esac;; esac; return 1; }
           for x in chat_archive extensions_smoke vault voice_reply sensevoice image news_brief research; do
             if want "$x"; then echo "$x=yes" >> "$GITHUB_OUTPUT"; else echo "$x=no" >> "$GITHUB_OUTPUT"; fi
           done
