@@ -45,6 +45,7 @@ def _save_setup(**updates) -> None:
 
 class SetupWizard:
     _running = False
+    _instance: "SetupWizard | None" = None
 
     def __init__(self, on_complete: Callable[[], None] | None = None, *, is_rerun: bool = False):
         self.on_complete = on_complete or (lambda: None)
@@ -68,10 +69,27 @@ class SetupWizard:
                 set_active_provider_id(str(pid))
             cls._running = False
             return
-        if cls._running:
+        if cls._running and not cls._is_stale():
             return
         cls._running = True
-        cls().start()
+        cls._instance = cls()
+        cls._instance.start()
+
+    @classmethod
+    def _is_stale(cls) -> bool:
+        """True when the running wizard's dialog belongs to a different browser session than
+        the page asking for it. A page reload (or reconnect) creates a new NiceGUI client and
+        the old dialog is unreachable from it, so without this the class-level `_running` flag
+        left the new page with no wizard until the app was restarted."""
+        inst = cls._instance
+        if inst is None or inst.dialog is None:
+            return True
+        try:
+            from nicegui import context
+
+            return inst.dialog.client is not context.client
+        except Exception:
+            return False
 
     def start(self) -> None:
         _setup_log("Starting first-run setup wizard…")
