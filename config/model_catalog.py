@@ -425,6 +425,26 @@ MODEL_CATALOG: dict[str, list[dict]] = {
     ],
 }
 
+# CI-only: end-to-end tests add one tiny Stable-Diffusion-compatible checkpoint (a Hugging Face
+# repo id) so image generation can be exercised end to end on a small CI runner, where the real
+# 5-8 GB catalog models don't fit in RAM. Never set in normal use.
+_e2e_image_model = __import__("os").environ.get("LOMA_E2E_IMAGE_MODEL", "").strip()
+if _e2e_image_model:
+    MODEL_CATALOG["image_generation"].append({
+        "name": _e2e_image_model,
+        "label": "E2E tiny test model",
+        "size": "tiny",
+        "size_gb": 0.1,
+        "min_ram": 1,
+        "min_vram": 0,
+        "tier": "fast",
+        "hardware_tiers": [1, 2, 3, 4],
+        "pipeline": "sd15",
+        "enabled": True,
+        "badge": "Test",
+        "desc": "Tiny checkpoint used only by automated tests.",
+    })
+
 MUST_HAVE_TOOLS: list[dict[str, str]] = [
     {"key": "ollama", "label": "Backend inference (Ollama)"},
     {"key": "ffmpeg", "label": "ffmpeg (audio/video)"},

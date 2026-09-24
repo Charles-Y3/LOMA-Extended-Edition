@@ -2,6 +2,7 @@
 """Native folder picker."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -26,6 +27,10 @@ def _browse_folder_macos(title: str) -> str:
 
 
 def browse_folder(*, title: str = "Select folder") -> str:
+    # CI-only: a headless runner can't click a native folder dialog, so tests name the folder.
+    forced = os.environ.get("LOMA_E2E_PICK_FOLDER", "").strip()
+    if forced:
+        return forced
     if sys.platform == "darwin":
         return _browse_folder_macos(title)
     try:

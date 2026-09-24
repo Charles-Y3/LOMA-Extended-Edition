@@ -64,12 +64,15 @@ def main(engine: str) -> int:
             # Checkboxes in order: whisper base, small, turbo, large, then SenseVoice.
             # Smallest Whisper only, and no SenseVoice (~1 GB) to keep CI quick; the pip
             # install of faster-whisper is the part that used to fail read-only.
-            for i, want in enumerate((True, False, False, False, False)):
+            # E2E_SENSEVOICE=1 also installs SenseVoice (funasr is bundled; the ~1 GB model is
+            # downloaded) — the slow variant, run from the heavy tier.
+            with_sensevoice = os.environ.get("E2E_SENSEVOICE") == "1"
+            for i, want in enumerate((True, False, False, False, with_sensevoice)):
                 _set_checked(page, i, want)
             page.locator("button", has_text="Download & continue").click()
             print(f"[{engine}] clicked Download & continue")
 
-            _wait_body(page, NEXT_STEP, 900, fail_if=FAILED)
+            _wait_body(page, NEXT_STEP, 1800 if with_sensevoice else 900, fail_if=FAILED)
             print(f"[{engine}] voice input installed from a read-only app folder")
         except Exception as exc:
             print(f"[{engine}] FAILED: {exc}")

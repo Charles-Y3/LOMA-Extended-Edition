@@ -117,8 +117,13 @@ class SetupWizard:
                 self.dialog.open()
                 # CI-only: lets the end-to-end test open the wizard straight on the step that
                 # installs packages and downloads models (tests/e2e/voice_step_e2e.py).
-                if os.environ.get("LOMA_E2E_WIZARD_STEP") == "voice":
+                e2e_step = os.environ.get("LOMA_E2E_WIZARD_STEP", "")
+                if e2e_step == "voice":
                     self._show_voice_input_step()
+                elif e2e_step == "voice_reply":
+                    self._show_voice_reply_step()
+                elif e2e_step == "image":
+                    self._show_image_model_step()
                 else:
                     self._show_connectivity_step()
         except Exception:

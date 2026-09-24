@@ -1,0 +1,97 @@
+name: macOS feature tests (extended)
+
+# The Mac end-to-end suite beyond first-run + chat (see mac-e2e.yml): exercises the app's real
+# features on a real Apple-Silicon runner, all from a READ-ONLY app location (a disk image that
+# behaves like macOS App Translocation), with fresh user data and a Finder-like environment.
+# Nobody can test on a Mac locally, so this is the Mac safety net.
+#
+#   quick:  chat_archive, extensions_smoke, vault, voice_reply
+#   heavy:  sensevoice (~1 GB model), image (tiny Stable-Diffusion test model — the real catalog
+#           models need more RAM than a 7 GB runner has)
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose macOS zip to test"
+        required: false
+        default: "v1.0.0"
+      features:
+        description: "all | quick | heavy | comma list (chat_archive,extensions_smoke,vault,voice_reply,sensevoice,image)"
+        required: false
+        default: "all"
+
+jobs:
+  features:
+    runs-on: macos-latest
+    permissions:
+      contents: write   # lets `gh release download` see a not-yet-published draft release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+      FEATURES: ${{ github.event.inputs.features }}
+      CHAT_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright (WebKit = Safari's engine)
+        run: |
+          pip install playwright
+          python -m playwright install webkit
+
+      - name: Download the shipped app and mount it READ-ONLY
+        run: |
+          gh release download "$TAG" --repo "${{ github.repository }}" -p LOMA-Extended-Edition-macOS.zip
+          ditto -x -k LOMA-Extended-Edition-macOS.zip shipped
+          hdiutil create -srcfolder shipped/LOMA-release -volname LOMARO -fs HFS+ -format UDRO "$RUNNER_TEMP/ro.dmg"
+          hdiutil attach "$RUNNER_TEMP/ro.dmg" -readonly -nobrowse -mountpoint /Volumes/LOMARO
+          touch "/Volumes/LOMARO/should-fail" 2>/dev/null && { echo "mount is writable!"; exit 1; } || echo "mount is read-only, as intended"
+          df -h / | tail -1
+
+      - name: Install Ollama and a tiny chat model
+        run: |
+          brew install ollama
+          (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &)
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/tags >/dev/null && break; sleep 1; done
+          ollama pull "$CHAT_MODEL"
+
+      - name: Decide which features run
+        id: pick
+        run: |
+          f="$FEATURES"
+          want() { case ",$f," in *",all,"*|*",$1,"*) return 0;; esac; case "$f" in quick) case "$1" in chat_archive|extensions_smoke|vault|voice_reply) return 0;; esac;; heavy) case "$1" in sensevoice|image) return 0;; esac;; esac; return 1; }
+          for x in chat_archive extensions_smoke vault voice_reply sensevoice image; do
+            if want "$x"; then echo "$x=yes" >> "$GITHUB_OUTPUT"; else echo "$x=no" >> "$GITHUB_OUTPUT"; fi
+          done
+          cat "$GITHUB_OUTPUT"
+
+      - name: chat_archive - save a chat, see it in the archive
+        if: always() && steps.pick.outputs.chat_archive == 'yes'
+        run: bash tests/e2e/mac_feature_run.sh chat_archive feature_e2e.py webkit
+
+      - name: extensions_smoke - open every bundled extension
+        if: always() && steps.pick.outputs.extensions_smoke == 'yes'
+        run: bash tests/e2e/mac_feature_run.sh extensions_smoke feature_e2e.py webkit
+
+      - name: vault - index a folder and search it (Knowledge Vault)
+        if: always() && steps.pick.outputs.vault == 'yes'
+        run: |
+          mkdir -p "$RUNNER_TEMP/vault-docs"
+          echo "The Zorblax Protocol requires exactly seven purple bananas for the annual ceremony." > "$RUNNER_TEMP/vault-docs/zorblax.txt"
+          echo "Unrelated note: the meeting moved to Thursday and the printer needs paper." > "$RUNNER_TEMP/vault-docs/other.txt"
+          LOMA_E2E_PICK_FOLDER="$RUNNER_TEMP/vault-docs" bash tests/e2e/mac_feature_run.sh vault feature_e2e.py webkit
+
+      - name: voice_reply - download a Piper voice from the read-only app
+        if: always() && steps.pick.outputs.voice_reply == 'yes'
+        run: LOMA_E2E_WIZARD_STEP=voice_reply bash tests/e2e/mac_feature_run.sh voice_reply feature_e2e.py webkit 1
+
+      - name: sensevoice - install SenseVoice (heavy)
+        if: always() && steps.pick.outputs.sensevoice == 'yes'
+        run: E2E_SENSEVOICE=1 LOMA_E2E_WIZARD_STEP=voice bash tests/e2e/mac_feature_run.sh sensevoice voice_step_e2e.py webkit 1
+
+      - name: image - download a tiny model and generate an image (heavy)
+        if: always() && steps.pick.outputs.image == 'yes'
+        run: LOMA_E2E_WIZARD_STEP=image LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-pipe bash tests/e2e/mac_feature_run.sh image feature_e2e.py webkit 1
