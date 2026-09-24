@@ -175,8 +175,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "model step, or go to **Settings → Model Library** to download one."
         ),
         "chat.image_explicit_declined": (
-            "This request can't be turned into an image — it describes explicit sexual "
-            "content. Try rephrasing without that part."
+            "I couldn't create an image from that request. It may include content I can't "
+            "generate, or it may need more detail. Try rephrasing it and describing the scene."
         ),
         "chat.image_regen_hint_best": (
             "This used LOMA's best local image quality — there's no higher setting to "
@@ -3003,7 +3003,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chat.copy_done": "已複製訊息",
         "chat.image_regen_hint": "不滿意嗎？可以在 **設定 → 模型** 中嘗試不同的圖像模型。",
         "chat.image_no_model_installed": "尚未下載任何影像生成模型。請執行設定精靈的影像模型步驟，或到 **設定 → 模型庫** 下載一個。",
-        "chat.image_explicit_declined": "這個請求無法生成圖片——內容涉及露骨的性內容。請移除該部分後再試一次。",
+        "chat.image_explicit_declined": "我無法根據這個請求生成圖片。它可能包含我無法生成的內容，或需要更多細節。請換個說法，並描述一下場景。",
         "chat.image_regen_hint_best": "這已是 LOMA 本機可產生的最佳影像品質 — 沒有更高的設定可嘗試了。想要不同風格的話，調整提示詞後再重新生成即可。",
         "chat.image_regen_hint_try_quality_preset": "不滿意嗎？這個模型還能更清晰 — 到 **設定 → 模型庫** 將其切換為 **高品質** 模式（較慢）後再試一次。",
         "chat.image_regen_hint_try_model": "不滿意嗎？試試在 **設定 → 模型** 中換用更高階的圖像模型以獲得更好的品質。",
@@ -4755,7 +4755,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chat.copy_done": "已复制消息",
         "chat.image_regen_hint": "不满意吗？可以在 **设置 → 模型** 中尝试不同的图像模型。",
         "chat.image_no_model_installed": "尚未下载任何图像生成模型。请运行设置向导的图像模型步骤，或到 **设置 → 模型库** 下载一个。",
-        "chat.image_explicit_declined": "这个请求无法生成图片——内容涉及露骨的性内容。请移除该部分后再试一次。",
+        "chat.image_explicit_declined": "我无法根据这个请求生成图片。它可能包含我无法生成的内容，或需要更多细节。请换个说法，并描述一下场景。",
         "chat.image_regen_hint_best": "这已是 LOMA 本地可生成的最佳图像质量 — 没有更高的设置可尝试了。想要不同风格的话，调整提示词后重新生成即可。",
         "chat.image_regen_hint_try_quality_preset": "不满意吗？这个模型还能更清晰 — 到 **设置 → 模型库** 将其切换为 **高质量** 模式（较慢）后再试一次。",
         "chat.image_regen_hint_try_model": "不满意吗？试试在 **设置 → 模型** 中换用更高阶的图像模型以获得更好的质量。",
@@ -5521,6 +5521,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'chat.copy_done': 'Mensaje copiado',
         'chat.image_regen_hint': '¿No te convence? Prueba otro modelo de imagen en **Configuración → Modelos**.',
         'chat.image_no_model_installed': 'Todavía no se ha descargado ningún modelo de generación de imágenes. Ejecuta el paso del modelo de imagen del asistente de configuración, o ve a **Configuración → Biblioteca de modelos** para descargar uno.',
+        'chat.image_explicit_declined': 'No pude crear una imagen a partir de esa solicitud. Puede incluir contenido que no puedo generar, o necesitar más detalle. Prueba a reformularla y a describir la escena.',
         'chat.image_regen_hint_best': 'Esta imagen usó la mejor calidad local de LOMA — no hay un ajuste más alto que probar. Para un estilo distinto, ajusta el prompt y vuelve a generar.',
         'chat.image_regen_hint_try_quality_preset': '¿No te convence? Este modelo puede ser más nítido — cámbialo al modo **Alta calidad** en **Configuración → Biblioteca de modelos** (más lento) e inténtalo de nuevo.',
         'chat.image_regen_hint_try_model': '¿No te convence? Prueba un modelo de imagen de nivel superior en **Configuración → Modelos** para mejor calidad.',
@@ -7218,6 +7219,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'chat.copy_done': 'Nachricht kopiert',
         'chat.image_regen_hint': 'Nicht zufrieden? Probiere ein anderes Bildmodell unter **Einstellungen → Modelle**.',
         'chat.image_no_model_installed': 'Es ist noch kein Bildgenerierungsmodell heruntergeladen. Führe den Bildmodell-Schritt des Einrichtungsassistenten aus, oder gehe zu **Einstellungen → Modellbibliothek**, um eines herunterzuladen.',
+        'chat.image_explicit_declined': 'Aus dieser Anfrage konnte ich kein Bild erstellen. Sie enthält möglicherweise Inhalte, die ich nicht erzeugen kann, oder es fehlen Details. Formuliere sie um und beschreibe die Szene.',
         'chat.image_regen_hint_best': 'Das ist bereits die beste lokale Bildqualität von LOMA — es gibt keine höhere Einstellung. Für einen anderen Stil passe den Prompt an und generiere erneut.',
         'chat.image_regen_hint_try_quality_preset': 'Nicht zufrieden? Dieses Modell kann schärfer — stelle es in **Einstellungen → Modellbibliothek** auf den Modus **Hohe Qualität** (langsamer) und versuche es erneut.',
         'chat.image_regen_hint_try_model': 'Nicht zufrieden? Probiere ein höherwertiges Bildmodell in **Einstellungen → Modelle** für bessere Qualität.',
