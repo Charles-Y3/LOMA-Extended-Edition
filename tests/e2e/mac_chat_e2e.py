@@ -62,9 +62,17 @@ def main(engine: str) -> int:
                 for marker in ERROR_MARKERS:
                     if marker.lower() in reply.lower():
                         raise AssertionError(f"error text in the reply area: {marker!r}")
+                # While generating, the UI shows a "LOMA is thinking or processing…" /
+                # "Preparing output…" placeholder and a stop button; only an idle UI (send
+                # button back) with real text counts as a finished reply.
+                busy = (
+                    "thinking or processing" in reply
+                    or "Preparing output" in reply
+                    or reply.rstrip().endswith("stop")
+                )
                 if reply != last:
                     last, stable_since = reply, time.time()
-                elif len(reply) > 15 and time.time() - stable_since > 8:
+                elif not busy and len(reply) > 15 and time.time() - stable_since > 8:
                     break
                 time.sleep(1)
             else:
