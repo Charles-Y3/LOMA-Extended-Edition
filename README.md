@@ -1,8 +1,11 @@
-# LOMA — Local Orchestrated Multimodal Automation
+# LOMA Extended Edition — Local Orchestrated Multimodal Automation
 
-**Version 1.0.0** — available for Windows and macOS.
+**Version 1.0.0** — available for Windows and macOS (Apple Silicon).
 
-Privacy-first local agentic workstation.
+Privacy-first local agentic workstation. Extended Edition adds image generation (posters,
+diagrams, presentation and document images) on top of the core chat, document, and
+multimodal file-understanding features. See [EDITIONS.md](EDITIONS.md) for the full
+edition comparison.
 
 LOMA is not a simple chat app. It is a modular offline AI workspace combining multimodal
 file understanding, service-first routing, plugin-based extensibility, local LLM inference,
@@ -21,22 +24,29 @@ own machine.
 
 ### Option A — Download the app (easiest, no Python needed)
 
-Grab the latest build from the project's GitHub **Releases** page.
+Download the latest build from this repository's
+[**Releases**](https://github.com/Charles-Y3/LOMA-Extended-Edition/releases) page. Download
+the `.zip` straight from there and unzip it once — don't re-zip or re-upload it elsewhere
+(large re-hosted copies can get corrupted in transit).
 
 | Platform | File | Notes |
 |---|---|---|
-| Windows | `LOMA-windows.zip` | Unzip anywhere, run `LOMA.exe` inside the folder |
-| macOS | `LOMA-macos.zip` | **Apple Silicon (M1/M2/M3/M4) only** — see below for Intel Macs |
+| Windows 10/11 (64-bit) | `LOMA-Extended-Edition-Windows.zip` | Unzip anywhere, run `LOMA Extended Edition.exe` inside the folder |
+| macOS | `LOMA-Extended-Edition-macOS.zip` | **Apple Silicon (M1/M2/M3/M4) only** — unzip and open `LOMA Extended Edition.app`; see below for Intel Macs |
 
-**First launch on macOS:** the app isn't notarized by Apple, so Gatekeeper will flag it as
-from an unidentified developer the first time. Either:
+Both downloads are about 1 GB (they bundle the local AI stack and the embedding model).
+
+**First launch on macOS:** the app isn't notarized by Apple (no paid developer
+certificate), so Gatekeeper blocks it the first time. In Terminal, remove the download
+quarantine flag once, then open it normally:
 
 ```bash
-xattr -dr com.apple.quarantine /path/to/LOMA.app
+xattr -cr "/path/to/LOMA Extended Edition.app"
 ```
 
-or right-click (Control-click) `LOMA.app` → **Open** → **Open** in the dialog. Either way,
-it's a one-time step per download — after that it opens normally.
+(or right-click / Control-click the app → **Open** → **Open**). If macOS instead says the
+app is "damaged and can't be opened", re-download it directly from the Releases page and
+run the same `xattr` command before opening. It's a one-time step per download.
 
 **Intel Mac:** the packaged build is Apple Silicon only. Use Option B (run from source)
 instead.
@@ -83,9 +93,9 @@ automatically the moment a feature you try to use needs something that isn't the
 
 | Platform | Location |
 |---|---|
-| Windows (packaged) | `%APPDATA%\LOMA` |
-| macOS (packaged) | `~/Library/Application Support/LOMA` |
-| Linux (packaged) | `~/.loma` |
+| Windows (packaged) | `%APPDATA%\LOMA Extended Edition` |
+| macOS (packaged) | `~/Library/Application Support/LOMA Extended Edition` |
+| Linux (packaged) | `~/.loma-extended-edition` |
 | Running from source | the project folder's own `data/` directory |
 
 This is where your chats, generated documents/images, and settings are stored — nothing is

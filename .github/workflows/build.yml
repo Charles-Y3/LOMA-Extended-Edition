@@ -5,15 +5,21 @@ name: Build and Release LOMA Extended Edition
 # image-generation stack) that can take a long time and burn a lot of Actions minutes on a
 # private repo's monthly quota, and per packaging/loma_extended.spec's own "First-build
 # note", a new spec almost always needs a follow-up pass or two before it's clean. Run it
-# explicitly from the Actions tab (or `gh workflow run build.yml -f version=v0.1.0`) once
-# you actually want a build — optionally also creating a GitHub Release from it.
+# explicitly from the Actions tab (or `gh workflow run build.yml -f version=v1.0.0`).
+#
+# Builds are delivered as GitHub Release assets, NOT Actions artifacts: this account's plan
+# includes only 0.5GB of Actions artifact storage per month and each build here is ~1GB, so
+# actions/upload-artifact fails on every run. Release assets aren't counted against that.
+# A draft release for the tag is created once up front (so the two build jobs can't race to
+# create duplicate drafts), each build uploads its zip into it, and the final job publishes
+# it — only when a real version (not the default "dev") was given.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag (e.g. v0.1.0) — leave blank to build without publishing a release"
+        description: "Release tag (e.g. v1.0.0). Leave as 'dev' for an unpublished draft drop-off build."
         required: false
-        default: ""
+        default: "dev"
       platform:
         description: "Which platform(s) to build"
         required: false
@@ -25,9 +31,31 @@ on:
           - macos
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.version }}
+    steps:
+      - name: Create the draft release if it doesn't exist yet
+        run: |
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "release $TAG already exists"
+          else
+            gh release create "$TAG" --repo "${{ github.repository }}" --draft \
+              --target "${{ github.sha }}" \
+              --title "LOMA Extended Edition $TAG" \
+              --notes "Windows: unzip and run 'LOMA Extended Edition.exe'. macOS (Apple Silicon): unzip, run 'xattr -cr' on the .app once, then open it. See the README for details."
+          fi
+
   build-windows:
+    needs: create-release
     if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'windows' }}
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -73,13 +101,14 @@ jobs:
           cd dist
           7z a -tzip "LOMA-Extended-Edition-Windows.zip" "LOMA Extended Edition"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: LOMA-Extended-Edition-Windows
-          path: dist/LOMA-Extended-Edition-Windows.zip
-          retention-days: 14
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.inputs.version }}" dist/LOMA-Extended-Edition-Windows.zip --clobber --repo "${{ github.repository }}"
 
   build-macos:
+    needs: create-release
     if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'macos' }}
     runs-on: macos-latest
     permissions:
@@ -186,60 +215,26 @@ jobs:
           cd dist
           ditto -c -k --keepParent "LOMA-release" "LOMA-Extended-Edition-macOS.zip"
 
-      - name: Publish to a draft Release (bypasses Actions artifact storage)
-        # actions/upload-artifact counts against Actions' own storage quota, which on
-        # this account's plan is 0.5GB total per MONTH — a single ~1GB build of this
-        # edition (torch/diffusers/transformers included) blows past that in one upload,
-        # every time, regardless of how many old artifacts get deleted first (confirmed:
-        # every run failed here even at 0 artifacts account-wide). GitHub Release assets
-        # are a separate mechanism with a much larger per-file limit and aren't counted
-        # against this quota at all. Reusing the same fixed tag on every run means this
-        # is just a drop-off point to download from and hand to Drive — not a public
-        # announcement (draft: true keeps it unlisted).
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: dev-macos
-          name: "Dev build (macOS) — not a public release"
-          draft: true
-          files: dist/LOMA-Extended-Edition-macOS.zip
+      - name: Upload to the release (bypasses Actions artifact storage)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.inputs.version }}" dist/LOMA-Extended-Edition-macOS.zip --clobber --repo "${{ github.repository }}"
 
-  release:
-    # Only runs when a version was actually supplied — a plain build-and-inspect run (blank
-    # version input) skips publishing anything, matching this workflow's existing
-    # "don't spend a release on an unverified first build" caution. needs.*.result checks
-    # (rather than plain `needs:`) because a platform-scoped run (platform: windows/macos)
-    # leaves the other build job "skipped", not "success" — this must still proceed as long
-    # as whichever job(s) were supposed to run actually succeeded.
+  publish:
+    # Only for a real version — the default "dev" tag stays an unpublished draft. The
+    # result checks (rather than plain `needs:`) let a platform-scoped run (one build job
+    # "skipped") still publish, but never when a build that did run failed or was cancelled.
     if: >
-      ${{ always() && github.event.inputs.version != '' &&
+      ${{ always() && github.event.inputs.version != 'dev' &&
           (needs.build-windows.result == 'success' || needs.build-macos.result == 'success') &&
-          needs.build-windows.result != 'failure' && needs.build-macos.result != 'failure' }}
+          needs.build-windows.result != 'failure' && needs.build-macos.result != 'failure' &&
+          needs.build-windows.result != 'cancelled' && needs.build-macos.result != 'cancelled' }}
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Download Windows artifact
-        if: needs.build-windows.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: LOMA-Extended-Edition-Windows
-          path: release-assets
-
-      - name: Download macOS artifact
-        # build-macos no longer uploads an Actions artifact (see its own "Publish to a
-        # draft Release" step's comment — a single macOS build of this edition exceeds
-        # this account's entire monthly Actions storage quota by itself). This step will
-        # find nothing and needs reworking (e.g. pulling from the "dev-macos" release
-        # instead) before a version-tagged "both"/windows+macos release is used again.
-        if: false
-        uses: actions/download-artifact@v4
-        with:
-          name: LOMA-Extended-Edition-macOS
-          path: release-assets
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: LOMA Extended Edition ${{ github.event.inputs.version }}
-          draft: true
-          files: release-assets/*.zip
+      - name: Publish the release
+        run: gh release edit "${{ github.event.inputs.version }}" --repo "${{ github.repository }}" --draft=false --latest
