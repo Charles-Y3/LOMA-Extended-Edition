@@ -7,7 +7,7 @@ name: macOS feature tests (extended)
 #
 #   quick:  chat_archive, extensions_smoke, vault, voice_reply
 #   heavy:  sensevoice (~1 GB model), image (tiny Stable-Diffusion test model — the real catalog
-#           models need more RAM than a 7 GB runner has)
+#           models need more RAM than a 7 GB runner has), news_brief + research (live web + LLM)
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +16,7 @@ on:
         required: false
         default: "v1.0.0"
       features:
-        description: "all | quick | heavy | comma list (chat_archive,extensions_smoke,vault,voice_reply,sensevoice,image)"
+        description: "all | quick | heavy | comma list (chat_archive,extensions_smoke,vault,voice_reply,sensevoice,image,news_brief,research)"
         required: false
         default: "all"
 
@@ -62,8 +62,8 @@ jobs:
         id: pick
         run: |
           f="$FEATURES"
-          want() { case ",$f," in *",all,"*|*",$1,"*) return 0;; esac; case "$f" in quick) case "$1" in chat_archive|extensions_smoke|vault|voice_reply) return 0;; esac;; heavy) case "$1" in sensevoice|image) return 0;; esac;; esac; return 1; }
-          for x in chat_archive extensions_smoke vault voice_reply sensevoice image; do
+          want() { case ",$f," in *",all,"*|*",$1,"*) return 0;; esac; case "$f" in quick) case "$1" in chat_archive|extensions_smoke|vault|voice_reply) return 0;; esac;; heavy) case "$1" in sensevoice|image|news_brief|research) return 0;; esac;; esac; return 1; }
+          for x in chat_archive extensions_smoke vault voice_reply sensevoice image news_brief research; do
             if want "$x"; then echo "$x=yes" >> "$GITHUB_OUTPUT"; else echo "$x=no" >> "$GITHUB_OUTPUT"; fi
           done
           cat "$GITHUB_OUTPUT"
@@ -95,3 +95,11 @@ jobs:
       - name: image - download a tiny model and generate an image (heavy)
         if: always() && steps.pick.outputs.image == 'yes'
         run: LOMA_E2E_WIZARD_STEP=image LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-pipe bash tests/e2e/mac_feature_run.sh image feature_e2e.py webkit 1
+
+      - name: news_brief - live web search + brief (heavy)
+        if: always() && steps.pick.outputs.news_brief == 'yes'
+        run: bash tests/e2e/mac_feature_run.sh news_brief feature_e2e.py webkit
+
+      - name: research - guided research (heavy)
+        if: always() && steps.pick.outputs.research == 'yes'
+        run: bash tests/e2e/mac_feature_run.sh research feature_e2e.py webkit

@@ -4,7 +4,7 @@
 Run by .github/workflows/mac-features-e2e.yml (not pytest), one feature per app launch:
     python feature_e2e.py <feature> [engine]
 
-Features: chat_archive, extensions_smoke, vault, voice_reply, image.
+Features: chat_archive, extensions_smoke, vault, voice_reply, image, news_brief, research.
 The app is started by the workflow (from a read-only location, fresh user data, settings
 pre-seeded to a tiny local Ollama model) with whatever test hooks that feature needs.
 """
@@ -189,12 +189,54 @@ def feat_image(page) -> None:
     print("an image was generated and shown in the chat")
 
 
+def feat_news_brief(page) -> None:
+    """Live web: searches news feeds, scrapes articles, streams a brief with references into
+    the chat. Exercises HTTPS from the frozen app (the certificate fix) end to end."""
+    open_workspace(page)
+    labels = extension_labels(page)
+    news = next((l for l in labels if "news" in l.lower()), None)
+    if not news:
+        raise AssertionError(f"no News Brief extension in {labels}")
+    pick_extension(page, news)
+    page.locator("button", has_text="Generate brief").first.click()
+    print("brief requested; waiting for the web search")
+    wait_body(page, "candidate article", 300, fail_if="No news articles could be loaded")
+    print("search reached the internet and found articles")
+    wait_body(page, "Loaded", 600, fail_if="No news articles could be loaded")
+    print("articles were downloaded and read")
+    wait_body(page, "News brief generated", 900)
+    print("brief was written and streamed into the chat")
+
+
+def feat_research(page) -> None:
+    """Guided research: plan (LLM drafts clarify questions) -> confirm -> web + synthesis."""
+    open_workspace(page)
+    labels = extension_labels(page)
+    res = next((l for l in labels if l.strip().lower().startswith("research")), None)
+    if not res:
+        raise AssertionError(f"no Research extension in {labels}")
+    pick_extension(page, res)
+    page.get_by_placeholder(re.compile("e.g. Impact of kindness")).fill(
+        "History of the printing press and its impact on literacy in Europe"
+    )
+    page.locator("button", has_text="Plan research").first.click()
+    wait_body(page, "Confirm or edit", 300, fail_if="Clarify plan failed")
+    print("clarify questions were drafted")
+    page.locator("button", has_text="Start research").first.click()
+    wait_body(page, "Research complete", 1200, fail_if="Research failed")
+    print("research ran (web search + synthesis) and completed")
+    wait_body(page, "Regenerate", 60)
+    print("results screen is showing")
+
+
 FEATURES = {
     "chat_archive": feat_chat_archive,
     "extensions_smoke": feat_extensions_smoke,
     "vault": feat_vault,
     "voice_reply": feat_voice_reply,
     "image": feat_image,
+    "news_brief": feat_news_brief,
+    "research": feat_research,
 }
 
 
