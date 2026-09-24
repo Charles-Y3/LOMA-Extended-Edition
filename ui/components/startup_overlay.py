@@ -181,8 +181,68 @@ def _try_setup_wizard() -> None:
             from ui.components.setup_wizard import SetupWizard
 
             SetupWizard.maybe_run()
+            watch["timer"] = ui.timer(3.0, _watch_wizard)
         except Exception as exc:
             print(f"[LOMA] setup wizard failed: {exc}")
+
+    watch: dict = {"timer": None, "reopens": 0, "browser_missing": 0}
+
+    # Watchdog: a wizard can silently end up not on the page the user is looking at — bound
+    # to a page that reloaded/reconnected, removed when the workspace was rebuilt, or (seen
+    # on slow first launches, Chromium) created and "open" on the server but never drawn by
+    # the browser — leaving no wizard and no way to start one short of restarting the app.
+    # Until setup completes, keep checking that the CURRENT page really shows a wizard (asking
+    # the browser itself, since the server can't see a rendering failure), and rebuild it
+    # when it doesn't.
+    async def _watch_wizard() -> None:
+        def _stop() -> None:
+            if watch["timer"] is not None:
+                watch["timer"].cancel()
+
+        try:
+            from nicegui import Client, context
+
+            from ui.components.setup_wizard import SetupWizard, _get_setup
+
+            # A watchdog belonging to a page that has since been closed/reloaded must not
+            # fight the live page's watchdog over who owns the wizard.
+            if _get_setup().get("completed") or context.client.id not in Client.instances:
+                _stop()
+                return
+            # A closed/reloaded page lingers in Client.instances for a few seconds with no
+            # socket; only a page with a live connection may (re)open the wizard.
+            if not context.client.has_socket_connection:
+                return
+            server_ok = SetupWizard.is_shown_on(context.client)
+            if server_ok:
+                try:
+                    drawn = await ui.run_javascript(
+                        "!!document.querySelector('.loma-setup-wizard')", timeout=3.0
+                    )
+                except Exception:
+                    return  # can't tell this tick
+                if drawn:
+                    watch["browser_missing"] = 0
+                    return
+                # Two ticks in a row, so a wizard still being drawn isn't rebuilt.
+                watch["browser_missing"] += 1
+                if watch["browser_missing"] < 2:
+                    return
+            watch["browser_missing"] = 0
+            if watch["reopens"] >= 5:
+                print("[LOMA] setup wizard could not be shown on this page")
+                _stop()
+                return
+            watch["reopens"] += 1
+            print(f"[LOMA] setup wizard missing on this page; reopening ({watch['reopens']})")
+            old = SetupWizard._instance.dialog if SetupWizard._instance else None
+            if old is not None and not old.is_deleted:
+                old.delete()
+            SetupWizard._running = False
+            SetupWizard.maybe_run()
+        except Exception as exc:
+            print(f"[LOMA] setup wizard check failed: {exc}")
+            _stop()
 
     # Only open the wizard after the real splash can dismiss — do not force-hide
     # the overlay early (that let users chat while models were still loading).

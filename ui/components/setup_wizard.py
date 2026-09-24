@@ -81,13 +81,27 @@ class SetupWizard:
         the page asking for it. A page reload (or reconnect) creates a new NiceGUI client and
         the old dialog is unreachable from it, so without this the class-level `_running` flag
         left the new page with no wizard until the app was restarted."""
-        inst = cls._instance
-        if inst is None or inst.dialog is None:
-            return True
         try:
             from nicegui import context
 
-            return inst.dialog.client is not context.client
+            return not cls.is_shown_on(context.client)
+        except Exception:
+            return cls._instance is None or cls._instance.dialog is None
+
+    @classmethod
+    def is_shown_on(cls, client) -> bool:
+        """True when the current wizard's dialog is a live, open element of `client`."""
+        inst = cls._instance
+        dialog = inst.dialog if inst is not None else None
+        if dialog is None:
+            return False
+        try:
+            return bool(
+                dialog.client is client
+                and not dialog.is_deleted
+                and dialog.id in client.elements
+                and dialog.value
+            )
         except Exception:
             return False
 
@@ -95,7 +109,7 @@ class SetupWizard:
         _setup_log("Starting first-run setup wizard…")
         try:
             with ui.dialog().props("persistent").classes("z-[10040]") as self.dialog, ui.card().classes(
-                "w-[560px] p-6 max-h-[90vh] overflow-y-auto"
+                "w-[560px] p-6 max-h-[90vh] overflow-y-auto loma-setup-wizard"
             ):
                 ui.label(t("setup.title")).classes("text-xl font-bold text-primary")
                 self.step_container = ui.column().classes("w-full mt-2")

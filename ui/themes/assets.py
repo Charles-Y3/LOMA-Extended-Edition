@@ -1303,12 +1303,6 @@ def inject_splitter_resizable_script() -> None:
                 const half = Math.max(220, Math.min(720, Math.floor((total - splitterW) / 2)));
                 ext.style.width = half + 'px';
                 ext.style.flexShrink = '0';
-                fetch('http://127.0.0.1:7640/ingest/30a3abcc-b47d-472e-8fe5-28d1a15b1a91',{
-                    method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'92d406'},
-                    body:JSON.stringify({sessionId:'92d406',location:'assets:syncExtensionDefaultWidth',message:'panel widths synced',
-                        data:{ext:ext.offsetWidth,ws:lomaFindEl('loma-workspace-panel')?.offsetWidth,half:half},
-                        hypothesisId:'J',timestamp:Date.now()})
-                }).catch(function(){});
             });
         }
         window.lomaSyncExtensionDefaultWidth = syncExtensionDefaultWidth;
