@@ -1,0 +1,27 @@
+name: Runner specs (throwaway diagnostic)
+
+# ~1 minute: prints the real disk, memory and CPU of the Mac and Windows runners, so heavy
+# end-to-end tests (image generation) can be sized from measurements, not documentation.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - run: |
+          sw_vers; uname -m
+          echo "RAM (GB): $(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))"
+          echo "CPUs: $(sysctl -n hw.ncpu)"
+          df -h / /Volumes 2>/dev/null
+          echo "free on / (GB): $(df -g / | awk 'NR==2{print $4}')"
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: |
+          echo "CPUs: $NUMBER_OF_PROCESSORS"
+          df -h / /d 2>/dev/null
+          powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB"
