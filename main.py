@@ -5,6 +5,39 @@ import re
 import sys
 import time
 
+# A frozen (PyInstaller) app re-executes THIS script for every child process that
+# multiprocessing spawns (torch/tokenizers/semaphore tracker on macOS's default "spawn"
+# method). Without freeze_support() each child ran the whole app again — extra web servers
+# on random ports, duplicate model loads, orphan processes left behind on exit.
+import multiprocessing
+
+multiprocessing.freeze_support()
+
+# multiprocessing's resource tracker launches `<exe> -c "<code>"`; a frozen exe ignores
+# -c and would otherwise boot a second copy of the app instead of running the snippet.
+if getattr(sys, "frozen", False) and len(sys.argv) >= 3 and sys.argv[1] == "-c":
+    exec(sys.argv[2], {"__name__": "__main__"})
+    sys.exit(0)
+
+# Frozen macOS builds have no usable CA bundle for the stdlib's ssl (python.org builds ship
+# none and the packaged app can't see the system one), so every urllib HTTPS call —
+# connectivity probe, update check, web search, news, grounded chat — failed certificate
+# verification and the app believed it was offline. Point OpenSSL at certifi's bundle
+# before anything creates an SSL context.
+try:
+    import certifi as _certifi
+
+    os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", _certifi.where())
+except Exception:
+    pass
+
+# A .app launched from Finder gets only /usr/bin:/bin:/usr/sbin:/sbin — Homebrew and
+# /usr/local tools (ollama CLI, espeak-ng, ...) that shutil.which() looks for are invisible.
+if sys.platform == "darwin":
+    _extra_paths = [p for p in ("/opt/homebrew/bin", "/usr/local/bin") if os.path.isdir(p)]
+    os.environ["PATH"] = os.pathsep.join([os.environ.get("PATH", ""), *_extra_paths])
+
 _startup_t0 = time.perf_counter()
 
 # Packaged --windowed .exe / .app: no console is attached, so sys.stdout/stderr are None.
@@ -395,7 +428,9 @@ def index() -> None:
     mount_language_splash(_boot)
 
 
-if __name__ in {"__main__", "__mp_main__"}:
+if __name__ == "__main__" or (__name__ == "__mp_main__" and not getattr(sys, "frozen", False)):
+    # "__mp_main__" only matters for dev's uvicorn --reload child; in a frozen build a
+    # multiprocessing child must never start another server.
     import atexit
 
     from services.sandbox.interactive import stop_sandbox_run

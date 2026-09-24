@@ -2,8 +2,32 @@
 """Native folder picker."""
 from __future__ import annotations
 
+import subprocess
+import sys
+
+
+def _browse_folder_macos(title: str) -> str:
+    # Tk (Cocoa) aborts the whole process when an NSWindow is created off the main thread,
+    # and this runs on a NiceGUI worker thread — so ask macOS for the dialog out-of-process.
+    script = (
+        "on run argv\n"
+        "  set p to POSIX path of (choose folder with prompt (item 1 of argv))\n"
+        "  return p\n"
+        "end run"
+    )
+    try:
+        out = subprocess.run(
+            ["osascript", "-e", script, title],
+            capture_output=True, text=True, timeout=600, check=False,
+        )
+    except Exception:
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
 
 def browse_folder(*, title: str = "Select folder") -> str:
+    if sys.platform == "darwin":
+        return _browse_folder_macos(title)
     try:
         import tkinter as tk
         from tkinter import filedialog

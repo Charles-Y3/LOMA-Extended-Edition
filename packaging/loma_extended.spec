@@ -127,6 +127,10 @@ datas += _piper_datas
 datas += _g2pw_datas
 datas += _unicode_rbnf_datas
 
+# main.py points SSL_CERT_FILE at certifi's cacert.pem so stdlib urllib HTTPS works in a
+# frozen macOS build (which otherwise has no CA bundle); the .pem must be on disk.
+datas += collect_data_files('certifi')
+
 binaries = []
 datas += _funasr_collect[0]
 binaries += _funasr_collect[1]
@@ -189,6 +193,7 @@ from PyInstaller.utils.hooks import collect_submodules
 hiddenimports += collect_submodules('pip')
 
 hiddenimports += [
+    'certifi',
     'rank_bm25',
     'msoffcrypto',
 ]
@@ -308,6 +313,10 @@ if sys.platform == 'darwin':
         bundle_identifier='local.loma.extended-edition',
         info_plist={
             'NSHighResolutionCapable': True,
+            # LOMA has no window of its own (the UI is a browser tab), so macOS treats it as
+            # a hidden background app and App Nap would throttle long generations whenever
+            # the browser is in front.
+            'LSAppNapIsDisabled': True,
             'NSMicrophoneUsageDescription': (
                 'LOMA Extended Edition uses the microphone for voice input and dictation.'
             ),
