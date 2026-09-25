@@ -134,6 +134,12 @@ datas += collect_data_files('certifi')
 binaries = []
 datas += _funasr_collect[0]
 binaries += _funasr_collect[1]
+# torchvision loads its native ops (torchvision/_C, image.so, lib*.dylib/dll) with torch.ops.load_library,
+# which PyInstaller's import scan never sees -> "operator torchvision::nms does not exist" on import,
+# which hid transformers' image classes and broke every image generation.
+_tv_collect = collect_all('torchvision')
+binaries += _tv_collect[1]
+datas += _tv_collect[0]
 hiddenimports_funasr = _funasr_collect[2]
 
 # transformers checks its dependencies' installed versions at runtime via
@@ -275,6 +281,7 @@ if sys.platform == 'win32':
     hiddenimports += ['win32com.client']
 
 hiddenimports += hiddenimports_funasr
+hiddenimports += _tv_collect[2]
 
 # --- Explicit excludes --------------------------------------------------------
 excludes = [
