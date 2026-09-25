@@ -420,6 +420,27 @@ if os.environ.get("LOMA_SELFTEST") == "1":
                 except Exception:
                     return traceback.format_exc()[-3500:].replace(chr(10), " | ")
 
+            def _iu_diag():
+                try:
+                    import transformers.image_utils as _m
+
+                    return f"imported keys={len(vars(_m))} has_valid={hasattr(_m, 'is_valid_image')} spec={_m.__spec__.origin if _m.__spec__ else None}"
+                except Exception:
+                    return traceback.format_exc()[-2500:].replace(chr(10), " | ")
+
+            def _retry():
+                import time
+
+                time.sleep(25)
+                try:
+                    from transformers import CLIPImageProcessor as _c2  # noqa: F401
+                    return "ok"
+                except Exception as _e2:
+                    return f"fail {_e2!r}"[:200]
+
+            _iu = _iu_diag()
+            _rt = _retry()
+            image_imports += f" | IMGUTILS_DIRECT={_iu} | RETRY_AFTER_25S={_rt}"
             try:
                 import transformers as _tf
                 from transformers.utils import import_utils as _iu
