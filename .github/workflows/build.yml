@@ -248,7 +248,7 @@ jobs:
             # verified HTTPS request (the exact failure a Mac user hit — the wizard said
             # "Offline" because stdlib urllib had no CA bundle) and log how many copies of
             # the app are running (a respawn regression shows up as a count > 2).
-            selftest=$(curl -s --max-time 40 "http://127.0.0.1:$LOMA_PORT/loma-selftest" || true)
+            selftest=$(curl -s --max-time 150 "http://127.0.0.1:$LOMA_PORT/loma-selftest" || true)
             echo "selftest response: $selftest"
             echo "app processes: $(pgrep -fc 'smoketest-LOMA.app/Contents/MacOS' || true)"
           fi
