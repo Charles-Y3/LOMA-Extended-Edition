@@ -418,7 +418,7 @@ if os.environ.get("LOMA_SELFTEST") == "1":
                     from transformers.models.clip.image_processing_clip import CLIPImageProcessor as _c  # noqa: F401
                     return "ok"
                 except Exception:
-                    return traceback.format_exc()[-600:].replace(chr(10), " | ")
+                    return traceback.format_exc()[-3500:].replace(chr(10), " | ")
 
             try:
                 import transformers as _tf
@@ -431,6 +431,7 @@ if os.environ.get("LOMA_SELFTEST") == "1":
                     f" torch={_iu.is_torch_available()}"
                     f" models_dir={sorted(os.listdir(os.path.dirname(_d)))[:20]}"
                     f" direct={_direct_clip()}"
+                    f" imgutils_in_modules={'transformers.image_utils' in sys.modules}"
                 )
             except Exception as _e:
                 image_imports += f" | DIAG failed: {_e!r}"
