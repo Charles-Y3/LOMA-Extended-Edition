@@ -413,6 +413,21 @@ if os.environ.get("LOMA_SELFTEST") == "1":
             import traceback
 
             image_imports = traceback.format_exc()[-700:]
+            try:
+                import transformers as _tf
+                from transformers.utils import import_utils as _iu
+
+                _d = os.path.join(os.path.dirname(_tf.__file__), "models", "clip")
+                image_imports += (
+                    f"
+DIAG clip_dir={sorted(os.listdir(_d)) if os.path.isdir(_d) else 'MISSING'}"
+                    f" torchvision={_iu.is_torchvision_available()} vision={_iu.is_vision_available()}"
+                    f" torch={_iu.is_torch_available()}"
+                    f" clip_struct_keys={list(getattr(sys.modules.get('transformers.models.clip'), '_import_structure', {}))[:12]}"
+                )
+            except Exception as _e:
+                image_imports += f"
+DIAG failed: {_e!r}"
         return {"online": conn.online, "reason": conn.reason, "image_imports": image_imports}
 
 
