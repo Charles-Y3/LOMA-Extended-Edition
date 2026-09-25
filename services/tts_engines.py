@@ -624,7 +624,7 @@ def warm_piper_voice(voice_id: str) -> None:
         pass
 
 
-def _synthesize_piper(text: str, voice_id: str, out_mp3: str) -> tuple[bool, str]:
+def _synthesize_piper(text: str, voice_id: str, out_mp3: str, rate: str = "+0%") -> tuple[bool, str]:
     model_path = piper_voice_path(voice_id)
     if not model_path:
         return False, "Piper voice model not installed"
@@ -638,10 +638,16 @@ def _synthesize_piper(text: str, voice_id: str, out_mp3: str) -> tuple[bool, str
         voice = _load_piper_voice(model_path)
         tmp_wav = out_mp3 + ".piper.wav"
         syn_config = None
-        if speaker_id is not None:
+        # Reply speed: "+20%" = 20% faster -> shorter phoneme length (length_scale < 1).
+        try:
+            pct = int((rate or "+0%").replace("%", ""))
+        except ValueError:
+            pct = 0
+        length_scale = max(0.5, min(2.0, 1.0 / (1.0 + pct / 100.0)))
+        if speaker_id is not None or pct != 0:
             from piper.config import SynthesisConfig
 
-            syn_config = SynthesisConfig(speaker_id=speaker_id)
+            syn_config = SynthesisConfig(speaker_id=speaker_id, length_scale=length_scale)
         with wave.open(tmp_wav, "wb") as wav_file:
             voice.synthesize_wav(text, wav_file, syn_config=syn_config)
         ok = _wav_to_mp3(tmp_wav, out_mp3)
@@ -661,7 +667,7 @@ def synthesize_offline(text: str, voice_id: str, rate: str, out_mp3: str) -> tup
     entry = piper_catalog_entry(voice_id)
     piper_err = ""
     if entry and piper_ready(voice_id):
-        ok, piper_err = _synthesize_piper(text, voice_id, out_mp3)
+        ok, piper_err = _synthesize_piper(text, voice_id, out_mp3, rate)
         if ok:
             return True, ""
     spoken_lang = entry["id"].split("_")[0] if entry else voice_id

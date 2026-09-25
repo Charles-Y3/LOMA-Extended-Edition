@@ -8886,6 +8886,21 @@ def to_traditional(text: str) -> str:
     return _S2T_CONVERTER.convert(text)
 
 
+_T2S_CONVERTER = None
+
+
+def to_simplified(text: str) -> str:
+    """Convert Traditional Chinese text to Simplified (OpenCC t2s); non-Chinese passes through."""
+    if not text:
+        return text
+    global _T2S_CONVERTER
+    if _T2S_CONVERTER is None:
+        from opencc import OpenCC
+
+        _T2S_CONVERTER = OpenCC("t2s")
+    return _T2S_CONVERTER.convert(text)
+
+
 def maybe_traditional(text: str) -> str:
     """Traditional Chinese by default (matches the SOTA reference app) — gated by
     the "traditional_chinese" setting, which covers Chinese output from any speech
@@ -8901,7 +8916,9 @@ def maybe_traditional(text: str) -> str:
     except Exception:
         want = True
     if not want:
-        return text
+        # Unticked = "keep Simplified": Whisper often emits Traditional on its own, so
+        # merely skipping the conversion left Traditional text on screen.
+        return to_simplified(text)
     return to_traditional(text)
 
 
