@@ -1127,10 +1127,13 @@ _COLOR_WORD_PHRASES: dict[str, dict[str, str]] = {
 CONCEPTS["explicit_nudity_request"] = {
     "en": (
         "without clothes", "without clothing", "without any clothes", "without any clothing",
-        "no clothes", "no clothing", "no fabric", "not wearing clothes", "not wearing anything",
+        "no clothing or fabric", "no clothing visible", "no clothes visible", "wearing no clothes",
+        "wearing no clothing", "not wearing clothes", "not wearing anything",
         "wearing nothing", "take off her clothes", "take off his clothes", "unclothed",
-        "undressed", "topless", "bottomless", "in the buff", "birthday suit", "stripped naked",
-        "strip naked", "bare breasts", "bare-breasted",
+        "undressed", "topless woman", "topless girl", "topless lady", "topless model",
+        "topless female", "topless man", "topless beach", "bottomless", "in the buff",
+        "birthday suit", "stripped naked", "strip naked",
+        "bare breasts", "bare-breasted",
     ),
     "zh_tw": (
         "沒穿衣服", "沒有穿衣服", "不穿衣服", "沒有衣服", "不著寸縷", "全裸", "裸體", "裸露",
