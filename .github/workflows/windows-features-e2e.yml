@@ -1,0 +1,61 @@
+name: Windows feature tests
+
+# Windows twin of mac-features-e2e.yml, currently the image-generation check: the packaged app
+# once shipped with the Stable-Diffusion libraries missing (every generation failed with
+# "Could not import module 'CLIPImageProcessor'"), and Windows CI never exercised image
+# generation. Runs the shipped exe from a write-denied folder with a fresh %APPDATA%.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose Windows zip to test"
+        required: false
+        default: "dev"
+      features:
+        description: "comma list (image)"
+        required: false
+        default: "image"
+
+jobs:
+  features:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: write   # lets `gh release download` see a not-yet-published draft release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+      FEATURES: ${{ github.event.inputs.features }}
+      CHAT_MODEL: qwen2.5:1.5b
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright browsers
+        run: |
+          pip install playwright
+          python -m playwright install chromium
+
+      - name: Download the shipped app and make its folder READ-ONLY
+        run: |
+          gh release download "$TAG" --repo "${{ github.repository }}" -p LOMA-Extended-Edition-Windows.zip
+          7z x LOMA-Extended-Edition-Windows.zip -oshipped -y > /dev/null
+          MSYS_NO_PATHCONV=1 icacls "$(cygpath -w "$PWD/shipped")" /deny "*S-1-1-0:(OI)(CI)(WD,AD,WEA,WA)" > /dev/null
+          echo "app folder is read-only"
+
+      - name: Install Ollama and the chat model
+        run: |
+          curl -fsSL -o ollama.zip https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip
+          7z x ollama.zip -oollama -y > /dev/null
+          (./ollama/ollama.exe serve > "$RUNNER_TEMP/ollama.log" 2>&1 &)
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:11434/api/tags >/dev/null && break; sleep 1; done
+          ./ollama/ollama.exe pull "$CHAT_MODEL"
+
+      - name: image - download a tiny model and generate an image
+        if: always() && contains(env.FEATURES, 'image')
+        run: LOMA_E2E_WIZARD_STEP=image LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-pipe bash tests/e2e/win_feature_run.sh image feature_e2e.py chromium 1

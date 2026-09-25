@@ -149,6 +149,14 @@ datas += copy_metadata('sentence-transformers', recursive=True)
 datas += copy_metadata('diffusers', recursive=True)
 datas += copy_metadata('accelerate')
 datas += copy_metadata('peft')
+# transformers decides whether image classes (CLIPImageProcessor, needed by the Stable Diffusion
+# pipeline) exist by asking importlib.metadata whether Pillow/torchvision are installed. Pillow is
+# an optional extra, so the recursive copy above misses it -> "cannot import name CLIPImageProcessor".
+for _pkg in ('pillow', 'torchvision', 'numpy', 'torch', 'safetensors', 'huggingface-hub', 'regex', 'requests', 'tqdm', 'packaging', 'filelock', 'pyyaml'):
+    try:
+        datas += copy_metadata(_pkg)
+    except Exception:
+        pass
 
 # requirements.txt: NOT installed into the thin build, but the in-app installers
 # (ui/components/asset_downloader.py, capability_installer.py) read it by relative path
