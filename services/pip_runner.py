@@ -30,6 +30,12 @@ class _LineForwardingStream:
     completed line to ``on_line`` — lets callers show live install progress the same
     way they already parse subprocess stdout line-by-line."""
 
+    # pip's StreamWrapper (pip/_internal/utils/misc.py) reads `.encoding` off whatever
+    # sys.stdout/stderr currently is; without it the install dies with
+    # "AttributeError: ... has no attribute 'encoding'" before doing anything.
+    encoding = "utf-8"
+    errors = "replace"
+
     def __init__(self, on_line: Callable[[str], None] | None):
         self._on_line = on_line
         self._buf = ""

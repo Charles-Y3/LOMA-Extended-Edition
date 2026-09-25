@@ -42,6 +42,7 @@ from ui.components.asset_downloader import AssetDownloader
 from ui.components.chat_model_picker import render_lmstudio_suggestions
 from ui.components.hardware_profile_card import build_hardware_profile_card
 from ui.components.voice_input_installer import install_speech_baseline
+from services.net_errors import friendly_net_error
 
 
 _ROLE_LABEL_KEYS = {
@@ -215,7 +216,7 @@ def _delete_llm(name, refs, container, theme_tokens, on_save_reload, downloader)
             ui.notify(t("config.deleted", model=resolved), type="positive")
             _refresh_panel(container, theme_tokens, on_save_reload, downloader)
         else:
-            ui.notify(t("config.delete_failed", error=msg), type="negative")
+            ui.notify(t("config.delete_failed", error=friendly_net_error(msg)), type="negative")
 
     _confirm_delete(t("config.delete_title"), body, _run)
 
@@ -233,7 +234,7 @@ def _delete_whisper_model(size, container, theme_tokens, on_save_reload, downloa
             refresh_traditional_chinese_checkbox()
             _refresh_panel(container, theme_tokens, on_save_reload, downloader)
         else:
-            ui.notify(t("config.delete_failed", error=msg), type="negative")
+            ui.notify(t("config.delete_failed", error=friendly_net_error(msg)), type="negative")
 
     _confirm_delete(
         t("config.delete_whisper_title"),
@@ -255,7 +256,7 @@ def _delete_image_model(repo_id, container, theme_tokens, on_save_reload, downlo
             refresh_image_select()
             _refresh_panel(container, theme_tokens, on_save_reload, downloader)
         else:
-            ui.notify(t("config.delete_failed", error=msg), type="negative")
+            ui.notify(t("config.delete_failed", error=friendly_net_error(msg)), type="negative")
 
     _confirm_delete(
         t("config.delete_image_title"),
@@ -323,7 +324,7 @@ def _delete_piper_voice(voice_id, container, theme_tokens, on_save_reload, downl
             refresh_voice_select()
             _refresh_panel(container, theme_tokens, on_save_reload, downloader)
         else:
-            ui.notify(t("config.delete_failed", error=msg), type="negative")
+            ui.notify(t("config.delete_failed", error=friendly_net_error(msg)), type="negative")
 
     _confirm_delete(
         t("config.delete_voice_title"),
@@ -344,7 +345,7 @@ def _delete_sensevoice_model(container, theme_tokens, on_save_reload, downloader
             refresh_traditional_chinese_checkbox()
             _refresh_panel(container, theme_tokens, on_save_reload, downloader)
         else:
-            ui.notify(t("config.delete_failed", error=msg), type="negative")
+            ui.notify(t("config.delete_failed", error=friendly_net_error(msg)), type="negative")
 
     _confirm_delete(
         t("config.delete_sensevoice_title"),
@@ -629,8 +630,8 @@ def _render_panel(container, theme_tokens, downloader, on_save_reload) -> None:
                                             _refresh_panel(container, theme_tokens, on_save_reload, downloader)
                                         else:
                                             image_progress.set_value(0)
-                                            image_status.set_text(t("assets.error", error=msg))
-                                            ui.notify(t("assets.download_failed", error=msg), type="negative")
+                                            image_status.set_text(t("assets.error", error=friendly_net_error(msg)))
+                                            ui.notify(t("assets.download_failed", error=friendly_net_error(msg)), type="negative")
                                             btn.enable()
 
                                     from services.session.workflow_control import schedule_on_ui
@@ -703,8 +704,8 @@ def _render_panel(container, theme_tokens, downloader, on_save_reload) -> None:
                                     _refresh_panel(container, theme_tokens, on_save_reload, downloader)
                                 else:
                                     whisper_progress.set_value(0)
-                                    whisper_status.set_text(t("assets.error", error=msg))
-                                    ui.notify(t("assets.download_failed", error=msg), type="negative")
+                                    whisper_status.set_text(t("assets.error", error=friendly_net_error(msg)))
+                                    ui.notify(t("assets.download_failed", error=friendly_net_error(msg)), type="negative")
                                     btn.enable()
 
                             install_speech_baseline(
@@ -777,8 +778,8 @@ def _render_panel(container, theme_tokens, downloader, on_save_reload) -> None:
                                 refresh_traditional_chinese_checkbox()
                                 _refresh_panel(container, theme_tokens, on_save_reload, downloader)
                             else:
-                                sv_status.set_text(t("assets.error", error=msg))
-                                ui.notify(t("assets.download_failed", error=msg), type="negative")
+                                sv_status.set_text(t("assets.error", error=friendly_net_error(msg)))
+                                ui.notify(t("assets.download_failed", error=friendly_net_error(msg)), type="negative")
                                 btn.enable()
 
                         install_sensevoice(on_status=_on_status, on_done=_on_done)
@@ -872,9 +873,9 @@ def _render_panel(container, theme_tokens, downloader, on_save_reload) -> None:
                                                 )
                                             else:
                                                 voice_progress.set_value(0)
-                                                voice_status.set_text(t("assets.error", error=detail))
+                                                voice_status.set_text(t("assets.error", error=friendly_net_error(detail)))
                                                 ui.notify(
-                                                    t("assets.download_failed", error=detail),
+                                                    t("assets.download_failed", error=friendly_net_error(detail)),
                                                     type="negative",
                                                 )
                                                 btn.enable()

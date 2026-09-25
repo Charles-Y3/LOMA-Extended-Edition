@@ -367,7 +367,7 @@ def _synthesize_sapi(text: str, spoken_lang: str, rate: str, out_mp3: str) -> tu
         ok = _wav_to_mp3(tmp_wav, out_mp3)
         return ok, "" if ok else "wav->mp3 conversion failed"
     except Exception as exc:
-        return False, str(exc)
+        return False, str(exc) or type(exc).__name__
     finally:
         try:
             if os.path.isfile(tmp_wav):
@@ -400,7 +400,7 @@ def _synthesize_macos_say(text: str, spoken_lang: str, rate: str, out_mp3: str) 
         AudioSegment.from_file(tmp_aiff, format="aiff").export(out_mp3, format="mp3")
         return os.path.isfile(out_mp3), ""
     except Exception as exc:
-        return False, str(exc)
+        return False, str(exc) or type(exc).__name__
     finally:
         try:
             if os.path.isfile(tmp_aiff):
@@ -424,7 +424,7 @@ def _synthesize_espeak(text: str, spoken_lang: str, rate: str, out_mp3: str) -> 
         ok = _wav_to_mp3(tmp_wav, out_mp3)
         return ok, "" if ok else "wav->mp3 conversion failed"
     except Exception as exc:
-        return False, str(exc)
+        return False, str(exc) or type(exc).__name__
     finally:
         try:
             if os.path.isfile(tmp_wav):
@@ -478,7 +478,7 @@ def delete_piper_voice(voice_id: str) -> tuple[bool, str]:
         _PIPER_VOICE_CACHE.pop(onnx, None)
         return True, ""
     except OSError as exc:
-        return False, str(exc)
+        return False, str(exc) or type(exc).__name__
 
 
 def piper_package_ready() -> bool:
@@ -518,6 +518,7 @@ def download_piper_voice(
     dominates total size (20-140MB depending on quality tier), so on_percent reports byte
     progress on that file only — the tiny .json config that follows is effectively instant."""
     import requests
+    from services.net_errors import is_offline_error
 
     entry = piper_catalog_entry(voice_id)
     if not entry:
@@ -548,7 +549,9 @@ def download_piper_voice(
                             on_progress(f"Downloading {base_id}{suffix}… {pct}%")
                 os.replace(tmp, dest)
         except Exception as exc:
-            return False, f"{base_id}{suffix}: {exc}"
+            from services.net_errors import friendly_net_error
+
+            return False, friendly_net_error(exc) if is_offline_error(exc) else f"{base_id}{suffix}: {exc}"
     if on_percent:
         on_percent(1.0)
     return True, ""
@@ -648,7 +651,7 @@ def _synthesize_piper(text: str, voice_id: str, out_mp3: str) -> tuple[bool, str
             pass
         return ok, "" if ok else "wav->mp3 conversion failed"
     except Exception as exc:
-        return False, str(exc)
+        return False, str(exc) or type(exc).__name__
 
 
 def synthesize_offline(text: str, voice_id: str, rate: str, out_mp3: str) -> tuple[bool, str]:

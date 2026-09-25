@@ -17,6 +17,7 @@ from services.model_router import image_generation_deps_available
 from services.platform_paths import resource_root
 from services.providers.registry import detect_providers, get_active_provider
 from services.system.profiler import get_system_profile
+from services.net_errors import friendly_net_error
 
 logger = logging.getLogger(__name__)
 
@@ -208,9 +209,9 @@ class AssetDownloader:
             err = str(exc)[:160]
 
             def _finish_err() -> None:
-                self._set_status(tr("assets.error", error=err))
+                self._set_status(tr("assets.error", error=friendly_net_error(err)))
                 self._set_progress(0)
-                ui.notify(tr("assets.download_failed", error=err), type="negative")
+                ui.notify(tr("assets.download_failed", error=friendly_net_error(err)), type="negative")
 
             self._schedule_ui(_finish_err)
 
@@ -302,9 +303,9 @@ class AssetDownloader:
             err = str(exc)[:160]
 
             def _finish_err() -> None:
-                self._set_status(tr("assets.error", error=err))
+                self._set_status(tr("assets.error", error=friendly_net_error(err)))
                 self._set_progress(0)
-                ui.notify(tr("assets.download_failed", error=err), type="negative")
+                ui.notify(tr("assets.download_failed", error=friendly_net_error(err)), type="negative")
 
             self._schedule_ui(_finish_err)
 
@@ -374,9 +375,9 @@ class AssetDownloader:
             err = str(exc)[:160]
 
             def _finish_err() -> None:
-                _status(tr("assets.error", error=err))
+                _status(tr("assets.error", error=friendly_net_error(err)))
                 _progress(0)
-                ui.notify(tr("assets.download_failed", error=err), type="negative")
+                ui.notify(tr("assets.download_failed", error=friendly_net_error(err)), type="negative")
                 if button is not None:
                     button.enable()
 
@@ -433,8 +434,8 @@ class AssetDownloader:
             err = str(exc)[:400]
 
             def _finish_err() -> None:
-                self._set_status(tr("assets.error", error=err))
-                ui.notify(tr("assets.pip_failed", error=err), type="negative")
+                self._set_status(tr("assets.error", error=friendly_net_error(err)))
+                ui.notify(tr("assets.pip_failed", error=friendly_net_error(err)), type="negative")
 
             self._schedule_ui(_finish_err)
 

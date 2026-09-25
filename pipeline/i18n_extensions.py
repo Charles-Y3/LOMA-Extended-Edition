@@ -4,6 +4,7 @@ from __future__ import annotations
 
 EXTRA: dict[str, dict[str, str]] = {
     "en": {
+        "assets.offline": "Can't reach the internet. Turn on Wi-Fi / check your connection, then try the download again.",
         "knowledge_vault.ws_add_folder_begin": "Add a folder to begin.",
         "knowledge_vault.ws_select_folder": "Select folder for this session",
         "knowledge_vault.ws_indexing_started": "Indexing started…",
@@ -623,6 +624,7 @@ EXTRA: dict[str, dict[str, str]] = {
         ),
     },
     "zh_tw": {
+        "assets.offline": "無法連線到網際網路。請開啟 Wi-Fi 或檢查網路連線後，再重新下載。",
         "knowledge_vault.ws_add_folder_begin": "新增資料夾以開始。",
         "knowledge_vault.ws_select_folder": "選擇此工作階段的資料夾",
         "knowledge_vault.ws_indexing_started": "已開始建立索引…",
@@ -1210,6 +1212,7 @@ EXTRA: dict[str, dict[str, str]] = {
         "di.settings.tooltip_document_passwords": "用於嘗試開啟加密 PDF、DOCX 與 DOC 檔案的密碼，以分號分隔。未列於此處的密碼會另外跳出視窗詢問；成功的密碼將被記住。",
     },
     "zh_cn": {
+        "assets.offline": "无法连接到互联网。请打开 Wi-Fi 或检查网络连接后，再重新下载。",
         "knowledge_vault.ws_add_folder_begin": "添加文件夹以开始。",
         "knowledge_vault.ws_select_folder": "选择此会话的文件夹",
         "knowledge_vault.ws_indexing_started": "已开始建立索引…",
@@ -1792,6 +1795,7 @@ EXTRA: dict[str, dict[str, str]] = {
         "di.settings.tooltip_document_passwords": "用于尝试打开加密 PDF、DOCX 与 DOC 文件的密码，以分号分隔。未列于此处的密码会另外弹窗询问；成功的密码将被记住。",
     },
     "es": {
+        "assets.offline": "No se puede acceder a internet. Activa el Wi-Fi o revisa tu conexión y vuelve a intentar la descarga.",
         "knowledge_vault.ws_add_folder_begin": "Añada una carpeta para comenzar.",
         "knowledge_vault.ws_select_folder": "Seleccionar carpeta para esta sesión",
         "knowledge_vault.ws_indexing_started": "Indexación iniciada…",
@@ -2329,6 +2333,7 @@ EXTRA: dict[str, dict[str, str]] = {
         "di.settings.document_passwords": "Contraseñas de documentos (separadas por punto y coma)",
     },
     "de": {
+        "assets.offline": "Keine Internetverbindung. Schalte das WLAN ein oder prüfe deine Verbindung und starte den Download erneut.",
         "knowledge_vault.ws_add_folder_begin": "Fügen Sie einen Ordner hinzu, um zu beginnen.",
         "knowledge_vault.ws_select_folder": "Ordner für diese Sitzung auswählen",
         "knowledge_vault.ws_indexing_started": "Indizierung gestartet…",

@@ -387,8 +387,7 @@ def _render_chat_card(rel_name: str) -> None:
                     return
                 parsed_msgs = load_chat_history_from_file(path)
                 if parsed_msgs:
-                    state.messages.clear()
-                    state.messages.extend(parsed_msgs)
+                    state.messages.extend(parsed_msgs)  # append; keep the current workspace
                     render_chat.refresh()
                     schedule_scroll_chat()
                     ui.notify(tr("archive.chat_restored"), color="positive")

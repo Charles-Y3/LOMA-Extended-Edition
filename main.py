@@ -231,18 +231,8 @@ for subdir in (
     "data/generated",
     "data/temp/voice",
     "data/temp/voice_input",
-    "data/formslator/styles",
-    "data/formslator/glossary",
-    "data/formslator/mapping",
-    "data/formslator/uploads",
-    "data/formslator/output",
 ):
     os.makedirs(subdir, exist_ok=True)
-
-from services.formslator.paths import ensure_default_glossary, ensure_default_templates
-
-ensure_default_templates()
-ensure_default_glossary()
 
 import config
 

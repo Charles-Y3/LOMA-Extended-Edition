@@ -168,11 +168,53 @@ def default_voice_for_locale(locale: str | None = None) -> str:
     return next(iter(options), "en")
 
 
-def resolve_voice_id(settings: dict | None) -> str:
+_CJK_RE = re.compile(r"[一-鿿]")
+_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+# Very common function words — enough to tell German/Spanish/English apart on a sentence.
+_LANG_STOPWORDS = {
+    "de": {"der", "die", "das", "und", "ist", "nicht", "ich", "sie", "es", "ein", "eine", "mit", "für", "auf", "den", "zu", "von", "wir", "kann", "hallo"},
+    "es": {"el", "la", "los", "las", "de", "que", "y", "es", "un", "una", "en", "por", "con", "para", "no", "se", "puedo", "hola", "está", "cómo"},
+    "en": {"the", "and", "is", "are", "to", "of", "you", "in", "it", "that", "for", "with", "can", "this", "i", "how"},
+}
+
+
+def guess_text_lang(text: str | None) -> str | None:
+    """Spoken-language guess for reply text: "zh"/"de"/"es"/"en", or None when unsure."""
+    if not text:
+        return None
+    if len(_CJK_RE.findall(text)) >= 2:
+        return "zh"
+    words = [w.lower() for w in _WORD_RE.findall(text[:600])]
+    if len(words) < 3:
+        return None
+    scores = {lang: sum(1 for w in words if w in sw) for lang, sw in _LANG_STOPWORDS.items()}
+    best = max(scores, key=scores.get)
+    if scores[best] < 2 or list(scores.values()).count(scores[best]) > 1:
+        return None
+    return best
+
+
+def _installed_voice_for_lang(lang: str, saved: str, options) -> str | None:
+    """The saved voice if it is an installed Piper voice in `lang`, else any installed one."""
+    from services.tts_engines import piper_catalog_entry, piper_voice_path
+
+    for key in [saved] + [k for k in options if k != saved]:
+        entry = piper_catalog_entry(key) if key else None
+        if entry and entry["id"].split("_")[0] == lang and piper_voice_path(key):
+            return key
+    return None
+
+
+def resolve_voice_id(settings: dict | None, text: str | None = None) -> str:
     """Prefer saved voice when it's usable for the UI locale's spoken language AND actually
     selectable in the current dropdown; else the default for that locale. Always returns a
     value present in tts_voice_options() so the reply-voice ui.select never gets an
-    out-of-range value (see default_voice_for_locale for the crash that guards against)."""
+    out-of-range value (see default_voice_for_locale for the crash that guards against).
+
+    When `text` (what is about to be spoken) is clearly in another language than the UI
+    locale (e.g. a Chinese/German/Spanish reply under an English UI), the locale voice can't
+    read it (the English system voice produces no audio for Chinese) — so use an installed
+    Piper voice for the text's language, preferring the saved one."""
     from pipeline.i18n import get_locale
     from services.tts_engines import piper_catalog_entry, piper_voice_path, spoken_lang_for_locale
 
@@ -181,6 +223,11 @@ def resolve_voice_id(settings: dict | None) -> str:
     lang = spoken_lang_for_locale(loc)
     options = tts_voice_options()
     saved = (settings.get("tts_voice_id") or "").strip()
+    text_lang = guess_text_lang(text)
+    if text_lang and text_lang != lang:
+        text_voice = _installed_voice_for_lang(text_lang, saved, options)
+        if text_voice:
+            return text_voice
     if saved and saved in options:
         if saved == lang:
             return saved
@@ -403,7 +450,7 @@ def _speak_worker(content: str, settings: dict, generation: int) -> None:
             return
     from pipeline.i18n import get_locale
 
-    voice = resolve_voice_id(settings)
+    voice = resolve_voice_id(settings, content)
     rate = (settings.get("tts_rate") or "+0%").strip()
     if rate not in TTS_RATE_OPTIONS:
         rate = "+0%"
@@ -579,7 +626,7 @@ def _speak_chunk_worker(text: str, settings: dict, generation: int, seq: int) ->
         return
     from pipeline.i18n import get_locale
 
-    voice = resolve_voice_id(settings)
+    voice = resolve_voice_id(settings, spoken)
     rate = (settings.get("tts_rate") or "+0%").strip()
     if rate not in TTS_RATE_OPTIONS:
         rate = "+0%"
