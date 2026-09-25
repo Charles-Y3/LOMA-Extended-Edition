@@ -58,4 +58,4 @@ jobs:
 
       - name: image - download a tiny model and generate an image
         if: always() && contains(env.FEATURES, 'image')
-        run: LOMA_E2E_WIZARD_STEP=image LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-torch bash tests/e2e/win_feature_run.sh image feature_e2e.py chromium 1
+        run: LOMA_E2E_WIZARD_STEP=image LOMA_E2E_IMAGE_SIZE=128 LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-torch bash tests/e2e/win_feature_run.sh image feature_e2e.py chromium 1

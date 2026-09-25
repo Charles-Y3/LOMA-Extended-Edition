@@ -29,7 +29,7 @@ json.dump(data, open(path, "w"), indent=4)
 PY
 
 extra=()
-for v in LOMA_E2E_PICK_FOLDER LOMA_E2E_WIZARD_STEP LOMA_E2E_IMAGE_MODEL LOMA_TORCH_DEVICE; do
+for v in LOMA_E2E_PICK_FOLDER LOMA_E2E_WIZARD_STEP LOMA_E2E_IMAGE_MODEL LOMA_TORCH_DEVICE LOMA_E2E_IMAGE_SIZE; do
   if [ -n "${!v:-}" ]; then extra+=("$v=${!v}"); fi
 done
 

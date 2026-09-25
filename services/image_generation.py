@@ -255,6 +255,10 @@ def resolve_image_presets(
     steps = quality_modes_for_model(model_id).get(mode)
     wh = resolution_presets_for_model(model_id).get(resolution_key)
     width, height = wh if wh else (None, None)
+    _e2e_size = os.environ.get("LOMA_E2E_IMAGE_SIZE", "").strip()
+    if _e2e_size.isdigit() and width:
+        # CI hook: a tiny test model on a 4-vCPU runner needs a small canvas to finish in minutes.
+        width = height = max(64, int(_e2e_size) // 8 * 8)
     return steps, width, height
 
 
