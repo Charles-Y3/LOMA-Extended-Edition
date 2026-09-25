@@ -269,6 +269,10 @@ jobs:
             *'"image_imports":"ok'*) ;;
             *) echo "frozen app cannot import the image-generation libraries: $selftest"; exit 1 ;;
           esac
+          case "$selftest" in
+            *'"deps_missing":{}'*) ;;
+            *) echo "frozen app is missing bundled dependencies: $selftest"; exit 1 ;;
+          esac
 
       - name: Add LICENSE, README, and user guides alongside the .app
         # The plain onedir folder ("dist/LOMA Extended Edition/") is NOT what gets

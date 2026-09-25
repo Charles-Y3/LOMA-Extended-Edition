@@ -461,7 +461,30 @@ if os.environ.get("LOMA_SELFTEST") == "1":
                 )
             except Exception as _e:
                 image_imports += f" | DIAG failed: {_e!r}"
-        return {"online": conn.online, "reason": conn.reason, "image_imports": image_imports}
+        # Import every major dependency the way its feature would. A frozen build that silently
+        # dropped a lazily-loaded package only fails when a user reaches that feature; this
+        # makes the build (and the Windows e2e) fail instead.
+        import importlib
+
+        deps_missing: dict[str, str] = {}
+        for _mod in (
+            "fitz", "pypdf", "docx", "pptx", "xlsxwriter", "mammoth", "markdown", "openpyxl", "lxml",
+            "pandas", "matplotlib", "PIL", "playwright", "trafilatura", "tiktoken", "rank_bm25", "pydub",
+            "imageio_ffmpeg", "opencc", "msoffcrypto", "chromadb", "langchain_chroma", "langchain_core",
+            "langchain_huggingface", "sentence_transformers", "torch", "torchaudio", "torchvision",
+            "faster_whisper", "funasr", "piper", "diffusers", "accelerate", "safetensors", "peft",
+            "gguf", "cv2", "rembg", "psutil", "yaml", "ollama",
+        ):
+            try:
+                importlib.import_module(_mod)
+            except Exception as _e:
+                deps_missing[_mod] = f"{type(_e).__name__}: {_e}"[:160]
+        return {
+            "online": conn.online,
+            "reason": conn.reason,
+            "image_imports": image_imports,
+            "deps_missing": deps_missing,
+        }
 
 
 @ui.page("/")
