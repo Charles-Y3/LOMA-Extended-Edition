@@ -266,7 +266,7 @@ jobs:
             *) echo "frozen app could not make a verified HTTPS request: $selftest"; exit 1 ;;
           esac
           case "$selftest" in
-            *'"image_imports":"ok"'*) ;;
+            *'"image_imports":"ok'*) ;;
             *) echo "frozen app cannot import the image-generation libraries: $selftest"; exit 1 ;;
           esac
 

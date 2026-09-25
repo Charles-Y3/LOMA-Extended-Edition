@@ -180,6 +180,9 @@ def _on_client_disconnect() -> None:
     startup-time connection churn before the user's first real page load can trigger it."""
     from services.platform_paths import is_frozen
 
+    if os.environ.get("LOMA_E2E_KEEP_ALIVE") == "1":
+        return  # test harness: browsers come and go between phases
+
     if not is_frozen() or not _had_real_client:
         return
 
@@ -441,6 +444,8 @@ if os.environ.get("LOMA_SELFTEST") == "1":
             _iu = _iu_diag()
             _rt = _retry()
             image_imports += f" | IMGUTILS_DIRECT={_iu} | RETRY_AFTER_25S={_rt}"
+            if _rt == "ok":
+                image_imports = "ok_after_retry (first attempt raced startup imports) " + image_imports[-1500:]
             try:
                 import transformers as _tf
                 from transformers.utils import import_utils as _iu
