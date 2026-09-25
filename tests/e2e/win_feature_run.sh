@@ -5,6 +5,7 @@
 # Runs the exe from a write-denied folder (see windows-e2e.yml), fresh %APPDATA%, seeded settings
 # (tiny local Ollama model), forwards LOMA_E2E_* hooks, then file-system checks.
 set -o pipefail
+export PYTHONIOENCODING=utf-8
 NAME="$1"; SCRIPT="$2"; ENGINE="$3"; WIZARD="${4:-0}"
 EXE="$PWD/shipped/LOMA Extended Edition/LOMA Extended Edition.exe"
 H="$RUNNER_TEMP/home-$NAME"; ROOT="$H/LOMA Extended Edition"
@@ -36,7 +37,7 @@ fail=0
 python "tests/e2e/$SCRIPT" "$NAME" "$ENGINE" || fail=1
 
 echo "--- app process alive? ---"; tasklist | grep -i "LOMA Extended" || echo "!! app process is GONE (crashed/exited)"
-powershell -NoProfile -Command "Get-WinEvent -FilterHashtable @{LogName='Application';Level=2;StartTime=(Get-Date).AddMinutes(-40)} -MaxEvents 5 -ErrorAction SilentlyContinue | ForEach-Object { $_.Message.Substring(0,[Math]::Min(500,$_.Message.Length)) }" || true
+powershell -NoProfile -Command 'Get-WinEvent -FilterHashtable @{LogName="Application";Level=2;StartTime=(Get-Date).AddMinutes(-40)} -MaxEvents 5 -ErrorAction SilentlyContinue | ForEach-Object { $_.Message.Substring(0,[Math]::Min(500,$_.Message.Length)) }' || true
 echo "--- app stdout/stderr (tail) ---"; tail -25 "$RUNNER_TEMP/app-$NAME.log" | grep -v "Downloading bytes" || true
 echo "--- loma.log (tail) ---"; tail -30 "$ROOT/logs/loma.log" 2>/dev/null || true
 echo "--- ollama log (tail) ---"; tail -15 "$RUNNER_TEMP/ollama.log" 2>/dev/null || true
