@@ -188,14 +188,15 @@ def feat_image(page) -> None:
         raise AssertionError("wizard never finished the image model download")
     print("tiny image model downloaded through the app's own download path; wizard closed")
     open_workspace(page)
-    before = page.locator("img").count()
     send_chat(page, "Generate an image of a red apple on a table.", timeout_s=600)
-    deadline = time.time() + 300
-    while time.time() < deadline and page.locator("img").count() <= before:
+    # The chat shows the result as a file card (not an inline <img>); a failure shows a .txt card
+    # under the same "Image ready" text, so require the .png name (the shell step also checks the file).
+    deadline = time.time() + 120
+    while time.time() < deadline and ".png" not in body(page):
         time.sleep(3)
-    if page.locator("img").count() <= before:
-        raise AssertionError("no image appeared in the chat after generation")
-    print("an image was generated and shown in the chat")
+    if ".png" not in body(page):
+        raise AssertionError("no .png image card appeared in the chat after generation")
+    print("an image (.png) was generated and shown in the chat")
 
 
 def feat_news_brief(page) -> None:
