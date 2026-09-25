@@ -149,6 +149,13 @@ datas += copy_metadata('sentence-transformers', recursive=True)
 datas += copy_metadata('diffusers', recursive=True)
 datas += copy_metadata('accelerate')
 datas += copy_metadata('peft')
+# transformers 5.x builds each model's lazy export table by REGEX-SCANNING the package's .py SOURCE
+# files at runtime (define_import_structure). PyInstaller ships only compiled code, so the table came
+# out empty and `from transformers import CLIPImageProcessor` failed. Ship the .py sources of the
+# modules we use (top-level + CLIP + auto/utils) as data.
+datas += collect_data_files('transformers', include_py_files=True,
+                            includes=['*.py', 'utils/*.py', 'models/clip/*.py', 'models/auto/*.py',
+                                      'integrations/*.py', 'generation/*.py'])
 # transformers decides whether image classes (CLIPImageProcessor, needed by the Stable Diffusion
 # pipeline) exist by asking importlib.metadata whether Pillow/torchvision are installed. Pillow is
 # an optional extra, so the recursive copy above misses it -> "cannot import name CLIPImageProcessor".
