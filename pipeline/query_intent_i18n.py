@@ -1118,6 +1118,39 @@ _COLOR_WORD_PHRASES: dict[str, dict[str, str]] = {
 }
 
 
+# Requests to depict a person unclothed, phrased without the words "nude"/"naked" —
+# used by pipeline/image_safety_embeddings.py's explicit-content gate on BOTH the user's own
+# wording and the authored image prompt (a small authoring LLM rewrote "without clothes"
+# into "no clothing or fabric visible", which no keyword/embedding check caught).
+# Deliberately bodily/undress phrasings only — bare "nude"/"naked" (which also mean a
+# lipstick colour or "naked eye") stay with the proximity check in that module.
+CONCEPTS["explicit_nudity_request"] = {
+    "en": (
+        "without clothes", "without clothing", "without any clothes", "without any clothing",
+        "no clothes", "no clothing", "no fabric", "not wearing clothes", "not wearing anything",
+        "wearing nothing", "take off her clothes", "take off his clothes", "unclothed",
+        "undressed", "topless", "bottomless", "in the buff", "birthday suit", "stripped naked",
+        "strip naked", "bare breasts", "bare-breasted",
+    ),
+    "zh_tw": (
+        "沒穿衣服", "沒有穿衣服", "不穿衣服", "沒有衣服", "不著寸縷", "全裸", "裸體", "裸露",
+        "赤裸", "脫光", "光著身子", "上空", "無衣",
+    ),
+    "zh_cn": (
+        "没穿衣服", "没有穿衣服", "不穿衣服", "没有衣服", "不着寸缕", "全裸", "裸体", "裸露",
+        "赤裸", "脱光", "光着身子", "上空", "无衣",
+    ),
+    "es": (
+        "sin ropa", "sin vestir", "desnuda", "desnudo", "desnudas", "desnudos", "en pelotas",
+        "semidesnud", "sin nada de ropa", "con los pechos al aire",
+    ),
+    "de": (
+        "ohne kleidung", "ohne kleider", "ohne klamotten", "ohne etwas an", "unbekleidet",
+        "entkleidet", "nackt", "oben ohne", "splitternackt",
+    ),
+}
+
+
 def matches(query: str, concept: str) -> bool:
     """True if `query` contains any phrase for `concept`, in any supported locale."""
     table = CONCEPTS.get(concept)

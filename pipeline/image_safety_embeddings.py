@@ -183,6 +183,10 @@ def is_explicit_prompt(text: str) -> bool:
         return False
     if _has_bare_nudity_words(stripped):
         return True
+    from pipeline.query_intent_i18n import matches
+
+    if matches(stripped, "explicit_nudity_request"):
+        return True
     if not _deps_available():
         return False
     try:

@@ -1535,7 +1535,9 @@ def _run_image_generation(
 
     from pipeline.image_safety_embeddings import is_explicit_prompt
 
-    if is_explicit_prompt(prompt):
+    # Check the user's own request too, not just what the authoring model wrote: a small
+    # authoring model can launder "without clothes" into a euphemistic prompt that passes.
+    if is_explicit_prompt(user_query) or is_explicit_prompt(prompt):
         from pipeline.i18n import t as tr
 
         sink.set_assistant_content(tr("chat.image_explicit_declined"))
