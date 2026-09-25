@@ -468,10 +468,10 @@ if os.environ.get("LOMA_SELFTEST") == "1":
 
         deps_missing: dict[str, str] = {}
         for _mod in (
-            "fitz", "pypdf", "docx", "pptx", "xlsxwriter", "mammoth", "markdown", "openpyxl", "lxml",
+            "pymupdf", "pypdf", "docx", "pptx", "xlsxwriter", "mammoth", "markdown", "openpyxl", "lxml",
             "pandas", "matplotlib", "PIL", "playwright", "trafilatura", "tiktoken", "rank_bm25", "pydub",
             "imageio_ffmpeg", "opencc", "msoffcrypto", "chromadb", "langchain_chroma", "langchain_core",
-            "langchain_huggingface", "sentence_transformers", "torch", "torchaudio", "torchvision",
+            "sentence_transformers", "torch", "torchaudio", "torchvision",
             "faster_whisper", "funasr", "piper", "diffusers", "accelerate", "safetensors", "peft",
             "gguf", "cv2", "rembg", "psutil", "yaml", "ollama",
         ):

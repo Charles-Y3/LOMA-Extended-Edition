@@ -282,6 +282,14 @@ if sys.platform == 'win32':
 
 hiddenimports += hiddenimports_funasr
 hiddenimports += _tv_collect[2]
+# rembg (background removal for image edits) reads pymatting's/onnxruntime's package metadata on import
+# and pulls its submodules lazily -> "No package metadata was found for pymatting" when frozen.
+datas += copy_metadata('rembg', recursive=True)
+_pm_collect = collect_all('pymatting')
+datas += _pm_collect[0]
+binaries += _pm_collect[1]
+hiddenimports += _pm_collect[2]
+hiddenimports += collect_submodules('rembg')
 
 # --- Explicit excludes --------------------------------------------------------
 excludes = [
