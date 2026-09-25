@@ -71,6 +71,11 @@ case "$NAME" in
     s="$(find "$H/.cache" "$ROOT" -iname '*sensevoice*' 2>/dev/null | head -1)"
     if [ -n "$s" ]; then echo "ok: SenseVoice files at $s"; else echo "!! no SenseVoice model files found"; fail=1; fi ;;
   image)
+    # When diffusers can't run, the app writes a .txt "fallback" (containing the real error) in place
+    # of the picture and still says "Image ready" — print it so the cause is visible.
+    for t in $(find "$ROOT/data" -path '*generated*' -name '*.txt' 2>/dev/null | head -3); do
+      echo "--- fallback file $t ---"; head -60 "$t"
+    done
     m="$(find "$H/.cache/huggingface" -iname '*tiny-stable-diffusion*' 2>/dev/null | head -1)"
     if [ -n "$m" ]; then echo "ok: tiny model downloaded by the app: $m"; else echo "!! tiny model not in the Hugging Face cache"; fail=1; fi
     g="$(find "$ROOT/data" -iname '*.png' 2>/dev/null | head -1)"
