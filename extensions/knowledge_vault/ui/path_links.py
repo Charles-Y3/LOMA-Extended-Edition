@@ -17,6 +17,9 @@ def resolve_abs_path(display_path: str) -> str:
 
 def loma_open_link(label: str, abs_path: str) -> str:
     """Markdown link opened via workspace chat loma-open handler."""
+    from services.security.path_guard import register_openable
+
+    register_openable(abs_path)  # the app chose to show this path; forged links are not registered
     safe_label = (label or abs_path).replace("[", "\\[").replace("]", "\\]")
     encoded = quote(abs_path, safe="")
     return f"[{safe_label}](loma-open:{encoded})"

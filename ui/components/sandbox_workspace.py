@@ -173,6 +173,35 @@ def _on_run() -> None:
         ui.notify(tr("sandbox.no_code"), type="warning")
         return
 
+    # Model-written code: scripts that only compute/print run straight away; one that deletes files,
+    # runs system commands, uses the network, etc. shows a short notice first (plain-code scan).
+    from services.security.policy_gate import decide
+
+    verdict = decide("run_code", code=state.sandbox_code)
+    risks = verdict.findings
+    if not risks:
+        _start_run()
+        return
+    with ui.dialog() as dlg, ui.card().classes("max-w-lg"):
+        ui.label(tr("security.risk_title")).classes("text-lg font-semibold")
+        ui.label(tr("security.risk_body")).classes("text-sm")
+        for key in risks:
+            ui.label("• " + tr(f"security.risk.{key}")).classes("text-sm")
+        with ui.row().classes("w-full justify-end gap-2 mt-2"):
+            ui.button(tr("security.risk_cancel"), on_click=dlg.close).props("flat")
+
+            def _confirm() -> None:
+                from services.security import audit
+
+                audit.record("run_code", "user_confirmed", ",".join(risks))
+                dlg.close()
+                _start_run()
+
+            ui.button(tr("security.risk_run_anyway"), on_click=_confirm).props("color=negative")
+    dlg.open()
+
+
+def _start_run() -> None:
     state.sandbox_running = True
     state.sandbox_status = "running"
     state.sandbox_output = ""

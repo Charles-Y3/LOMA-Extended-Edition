@@ -15,6 +15,11 @@ def open_local_path(path: str) -> None:
     if not abspath or not os.path.exists(abspath):
         ui.notify(tr("knowledge_vault.open_path_not_found", path=path), color="warning")
         return
+    from services.security.path_guard import is_dangerous_file
+
+    if is_dangerous_file(abspath):
+        ui.notify(tr("security.open_blocked"), color="warning")
+        return
     try:
         if os.path.isfile(abspath):
             if sys.platform == "win32":

@@ -74,7 +74,14 @@ def deliver_software_content(
     _refresh_sandbox_ui()
 
     if run_after_load:
-        _run_and_capture(state)
+        # Auto-run only when the plain-code scan finds nothing risky; otherwise the user runs it
+        # by hand from the Sandbox tab (where the risk notice is shown).
+        from services.security.code_risk import scan_code
+
+        if scan_code(code):
+            run_after_load = False
+        else:
+            _run_and_capture(state)
 
     summary = _completion_message(user_request, ran=run_after_load, state=state)
     sink.set_assistant_content(summary)

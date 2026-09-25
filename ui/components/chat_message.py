@@ -386,8 +386,7 @@ def _render_message_content(
             all_slots.extend(slots)
             if display_text.strip():
                 any_text = True
-                allow_os_links = "loma-os-open" in display_text or "loma-open:" in part
-                ui.markdown(display_text, sanitize=not allow_os_links).classes(md_classes).style(
+                ui.markdown(display_text).classes(md_classes).style(
                     md_style
                 )
         if not any_text and is_processing:
@@ -403,8 +402,7 @@ def _render_message_content(
     display_text, slots = strip_figure_markers(text)
     allow_images = not is_processing
     if display_text.strip():
-        allow_os_links = "loma-os-open" in display_text or "loma-open:" in raw
-        ui.markdown(display_text, sanitize=not allow_os_links).classes(md_classes).style(md_style)
+        ui.markdown(display_text).classes(md_classes).style(md_style)
     elif is_processing:
         ui.markdown(display_text).classes(f"{md_classes} italic opacity-80").style(md_style)
     else:

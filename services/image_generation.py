@@ -1055,6 +1055,10 @@ def _load_pipeline(
             "H1-H2",
         )
 
+        from services.security.model_files import require_safe_repo
+
+        require_safe_repo(load_model_id)
+
         import torch
 
         from services.system.profiler import resolve_torch_device

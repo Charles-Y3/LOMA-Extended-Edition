@@ -98,6 +98,9 @@ def _playwright_page() -> Iterator[Any]:
             locale="en-AU",
             viewport={"width": 1280, "height": 900},
         )
+        from services.security.url_guard import install_route_guard
+
+        install_route_guard(context)
         page = context.new_page()
         try:
             yield page

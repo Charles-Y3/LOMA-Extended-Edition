@@ -200,6 +200,15 @@ def _on_client_disconnect() -> None:
 
 app.on_disconnect(_on_client_disconnect)
 
+# Security: only this computer may reach the UI (see services/security/local_only.py).
+from services.security.local_only import LocalOnlyMiddleware, bind_host  # noqa: E402
+
+app.add_middleware(LocalOnlyMiddleware)
+
+from services.security.model_files import enforce_safe_torch_loading  # noqa: E402
+
+enforce_safe_torch_loading()  # pickle checkpoints load with weights_only=True (no arbitrary code)
+
 debug_log("main.py:imports_nicegui", "nicegui imported", {"ms": round((time.perf_counter() - _startup_t0) * 1000, 1)}, "F")
 
 if sys.platform == "win32":
@@ -374,6 +383,11 @@ async def loma_open_path(body: _OpenPathRequest) -> dict:
     path = (body.path or "").strip()
     if not path:
         raise HTTPException(status_code=400, detail="Missing path")
+    from services.security.policy_gate import decide
+
+    verdict = decide("open_path", path=path)
+    if not verdict.allowed:
+        raise HTTPException(status_code=403, detail=verdict.reason)
     abspath = os.path.abspath(path)
     if not os.path.exists(abspath):
         raise HTTPException(status_code=404, detail="Path not found")
@@ -568,6 +582,7 @@ if __name__ == "__main__" or (__name__ == "__mp_main__" and not getattr(sys, "fr
         title="LOMA Extended Edition",
         favicon=favicon_for_nicegui(),
         native=False,
+        host=bind_host(),
         show=_open_browser,
         dark=True,
         port=_port,

@@ -39,6 +39,37 @@ def stop_sandbox_run() -> bool:
     return True
 
 
+MAX_OUTPUT_BYTES = int(__import__("os").environ.get("LOMA_SANDBOX_MAX_OUTPUT", str(20 * 1024 * 1024)))
+_SHOWN_CHARS = 200_000
+
+
+def _output_watchdog(proc, out_f, err_f) -> None:
+    """Kill the script if it writes more than MAX_OUTPUT_BYTES (resource limit, guideline rule 10)."""
+    import os
+    import time
+
+    while proc.poll() is None:
+        try:
+            if os.fstat(out_f.fileno()).st_size > MAX_OUTPUT_BYTES or os.fstat(err_f.fileno()).st_size > MAX_OUTPUT_BYTES:
+                proc.kill()
+                return
+        except Exception:
+            return
+        time.sleep(0.25)
+
+
+def _read_capped(f) -> str:
+    try:
+        f.flush()
+        f.seek(0)
+        data = f.read(_SHOWN_CHARS + 1)
+        f.close()
+    except Exception:
+        return ""
+    text = data.decode("utf-8", errors="replace")
+    return text[:_SHOWN_CHARS] + (" … (output truncated)" if len(text) > _SHOWN_CHARS else "")
+
+
 def run_python_script(
     code: str,
     *,
@@ -56,18 +87,24 @@ def run_python_script(
     global _active_proc
     try:
         with _lock:
+            # stdout/stderr go to capped files (not memory pipes): a runaway `print` loop is killed at
+            # MAX_OUTPUT_BYTES instead of exhausting RAM.
+            out_f = open(script_dir / ".stdout.txt", "w+b")
+            err_f = open(script_dir / ".stderr.txt", "w+b")
             _active_proc = subprocess.Popen(
                 [sys.executable, str(script_path)],
                 stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=out_f,
+                stderr=err_f,
                 text=True,
                 cwd=str(script_dir),
             )
             proc = _active_proc
+        threading.Thread(target=_output_watchdog, args=(proc, out_f, err_f), daemon=True).start()
 
         try:
-            stdout, stderr = proc.communicate(input=stdin_text or "", timeout=timeout_s)
+            proc.communicate(input=stdin_text or "", timeout=timeout_s)
+            stdout, stderr = _read_capped(out_f), _read_capped(err_f)
         except subprocess.TimeoutExpired:
             stop_sandbox_run()
             return {

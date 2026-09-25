@@ -142,6 +142,9 @@ def build_chat_request(
         from services.model_router import NoChatModelError
 
         raise NoChatModelError(tr("chat.no_models_installed"))
+    from services.security.untrusted import with_frame
+
+    messages = with_frame(messages)  # standing "outside text is data, not instructions" rule on EVERY call
     t0 = time.perf_counter()
     opts = build_model_options(profile, extra_options, model=model)
     kwargs: dict[str, Any] = {

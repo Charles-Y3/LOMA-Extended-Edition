@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+from services.security.untrusted import wrap as wrap_untrusted
+
 from extensions.research.clarify_i18n import get_clarify_template
 from extensions.research.brief import ResearchBrief, _strip_json_fences
 from extensions.research.sources import ResearchSource
@@ -204,7 +206,7 @@ def extract_source_insights(
     )
     user = (
         f"Topic: {brief.topic}\nSource: {source.title}\nURL: {source.url or 'upload'}\n\n"
-        f"Text:\n{body}"
+        f"Text:\n{wrap_untrusted(body, source.url or source.title)}"
     )
     raw = _chat(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],

@@ -160,6 +160,10 @@ def open_file_in_os(path: str) -> None:
     abspath = os.path.abspath(path)
     if not os.path.isfile(abspath):
         raise FileNotFoundError(abspath)
+    from services.security.path_guard import is_dangerous_file
+
+    if is_dangerous_file(abspath):
+        raise PermissionError("Programs and scripts are not opened from LOMA")
     if sys.platform == "win32":
         os.startfile(abspath)  # noqa: S606 - local file the app itself generated
     elif sys.platform == "darwin":

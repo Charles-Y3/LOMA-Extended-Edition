@@ -2872,3 +2872,7 @@ EXTRA: dict[str, dict[str, str]] = {
 def merge_into(translations: dict[str, dict[str, str]]) -> None:
     for locale, keys in EXTRA.items():
         translations.setdefault(locale, {}).update(keys)
+    from pipeline.i18n_security import SECURITY_STRINGS
+
+    for locale, keys in SECURITY_STRINGS.items():
+        translations.setdefault(locale, {}).update(keys)

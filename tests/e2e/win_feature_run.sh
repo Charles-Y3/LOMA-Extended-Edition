@@ -48,7 +48,7 @@ echo "--- file-system checks ---"
 case "$NAME" in
   image)
     find "$ROOT/data" -path '*generated*' -name '*.txt' -exec sh -c 'echo "--- fallback file $1 ---"; head -70 "$1"' _ {} \; 2>/dev/null
-    m="$(find "$USERPROFILE/.cache/huggingface" "$H" -maxdepth 6 -iname '*tiny-stable-diffusion*' 2>/dev/null | head -1)"
+    m="$(find "$USERPROFILE/.cache/huggingface" "$H" -maxdepth 6 -iname '*tiny-sd-pipe*' 2>/dev/null | head -1)"
     if [ -n "$m" ]; then echo "ok: tiny model downloaded by the app: $m"; else echo "!! tiny model not in the Hugging Face cache"; fail=1; fi
     g="$(find "$ROOT/data" -iname '*.png' 2>/dev/null | head -1)"
     if [ -n "$g" ]; then echo "ok: generated image $g ($(du -h "$g" | cut -f1))"; else echo "!! no generated .png under $ROOT/data"; fail=1; fi ;;

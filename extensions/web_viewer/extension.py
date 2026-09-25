@@ -2,6 +2,7 @@
 """Web viewer — scrape page text; highlight to query LOMA (direct pipeline)."""
 from __future__ import annotations
 
+import html
 import asyncio
 import json
 
@@ -186,7 +187,7 @@ def build_web_viewer_panel() -> None:
                         if iframe:
                             iframe.set_visibility(True)
                             iframe.set_content(
-                                f'<iframe src="{url}" class="w-full h-full border-0 rounded-lg"></iframe>'
+                                f'<iframe src="{html.escape(url, quote=True)}" class="w-full h-full border-0 rounded-lg"></iframe>'
                             )
                     elif isinstance(content, str) and not str(content).startswith(("Error", "⚠️")):
                         _web_state["last_scraped_dict"] = {
@@ -205,7 +206,7 @@ def build_web_viewer_panel() -> None:
                         if iframe:
                             iframe.set_visibility(True)
                             iframe.set_content(
-                                f'<iframe src="{url}" class="w-full h-full border-0 rounded-lg"></iframe>'
+                                f'<iframe src="{html.escape(url, quote=True)}" class="w-full h-full border-0 rounded-lg"></iframe>'
                             )
                 except Exception as ex:
                     print(f"Web viewer error: {ex}")
@@ -215,7 +216,7 @@ def build_web_viewer_panel() -> None:
                     if iframe:
                         iframe.set_visibility(True)
                         iframe.set_content(
-                            f'<iframe src="{url}" class="w-full h-full border-0 rounded-lg"></iframe>'
+                            f'<iframe src="{html.escape(url, quote=True)}" class="w-full h-full border-0 rounded-lg"></iframe>'
                         )
 
             def _refresh_history_menu() -> None:

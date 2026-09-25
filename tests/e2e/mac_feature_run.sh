@@ -74,7 +74,7 @@ case "$NAME" in
     # When diffusers can't run, the app writes a .txt "fallback" (containing the real error) in place
     # of the picture and still says "Image ready" — print it so the cause is visible.
     find "$ROOT/data" -path '*generated*' -name '*.txt' -exec sh -c 'echo "--- fallback file $1 ---"; head -70 "$1"' _ {} \; 2>/dev/null
-    m="$(find "$H/.cache/huggingface" -iname '*tiny-stable-diffusion*' 2>/dev/null | head -1)"
+    m="$(find "$H/.cache/huggingface" -iname '*tiny-sd-pipe*' 2>/dev/null | head -1)"
     if [ -n "$m" ]; then echo "ok: tiny model downloaded by the app: $m"; else echo "!! tiny model not in the Hugging Face cache"; fail=1; fi
     g="$(find "$ROOT/data" -iname '*.png' 2>/dev/null | head -1)"
     if [ -n "$g" ]; then echo "ok: generated image $g ($(du -h "$g" | cut -f1))"; else echo "!! no generated .png under $ROOT/data"; fail=1; fi ;;

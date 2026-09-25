@@ -200,6 +200,9 @@ def scrape_website_text(url, *, skip_policy_check: bool = False):
                 viewport={"width": 1280, "height": 720}
             )
 
+            from services.security.url_guard import install_route_guard
+
+            install_route_guard(context)  # redirects/sub-resources may not reach local or private hosts
             page = context.new_page()
 
             # Heavy news sites (e.g. abc.net.au) need longer navigation + settle time

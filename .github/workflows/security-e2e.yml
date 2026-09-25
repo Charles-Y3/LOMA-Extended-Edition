@@ -1,0 +1,88 @@
+name: Security e2e (adversarial)
+
+# Adversarial checks against the SHIPPED apps (read-only install, fresh user data). Each check must be BLOCKED
+# by the security layers (services/security). Run it twice per release candidate:
+#   expect=pass  on the new build      -> every check passes
+#   expect=fail  on an old build (v1.0.0) -> the same checks FAIL, proving the tests really detect the missing gate
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to test"
+        required: false
+        default: "dev"
+      expect:
+        description: "pass (new build) | fail (old build without the gate - proves the tests bite)"
+        required: false
+        default: "pass"
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest pandas
+      - run: python -m pytest tests/security -q
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+      EXPECT: ${{ github.event.inputs.expect }}
+      CHAT_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download the shipped app and make its folder READ-ONLY
+        run: |
+          gh release download "$TAG" --repo "${{ github.repository }}" -p LOMA-Extended-Edition-Windows.zip
+          7z x LOMA-Extended-Edition-Windows.zip -oshipped -y > /dev/null
+          MSYS_NO_PATHCONV=1 icacls "$(cygpath -w "$PWD/shipped")" /deny "*S-1-1-0:(OI)(CI)(WD,AD,WEA,WA)" > /dev/null
+      - name: Adversarial checks
+        run: |
+          set +e
+          bash tests/e2e/win_feature_run.sh security security_e2e.py none 0
+          rc=$?
+          if [ "$EXPECT" = "pass" ]; then exit $rc; fi
+          if [ $rc -eq 0 ]; then echo "EXPECTED failures on an old build but every check passed - the tests do not bite"; exit 1; fi
+          echo "old build failed the checks, as expected (tests bite)"
+
+  macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+      EXPECT: ${{ github.event.inputs.expect }}
+      CHAT_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download the shipped app and mount it READ-ONLY
+        run: |
+          gh release download "$TAG" --repo "${{ github.repository }}" -p LOMA-Extended-Edition-macOS.zip
+          ditto -x -k LOMA-Extended-Edition-macOS.zip shipped
+          hdiutil create -srcfolder shipped/LOMA-release -volname LOMARO -fs HFS+ -format UDRO "$RUNNER_TEMP/ro.dmg"
+          hdiutil attach "$RUNNER_TEMP/ro.dmg" -readonly -nobrowse -mountpoint /Volumes/LOMARO
+      - name: Adversarial checks
+        run: |
+          set +e
+          bash tests/e2e/mac_feature_run.sh security security_e2e.py none 0
+          rc=$?
+          if [ "$EXPECT" = "pass" ]; then exit $rc; fi
+          if [ $rc -eq 0 ]; then echo "EXPECTED failures on an old build but every check passed - the tests do not bite"; exit 1; fi
+          echo "old build failed the checks, as expected (tests bite)"

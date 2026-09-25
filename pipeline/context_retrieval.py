@@ -99,7 +99,9 @@ def _format_chunks(chunks: list[TextChunk]) -> str:
     blocks: list[str] = []
     for c in chunks:
         loc = f" ({c.section})" if c.section else ""
-        blocks.append(f"--- PASSAGE from {c.source}{loc} [{c.chunk_id}] ---\n{c.text}")
+        from services.security.untrusted import wrap
+
+        blocks.append(f"--- PASSAGE from {c.source}{loc} [{c.chunk_id}] ---\n{wrap(c.text, c.source)}")
     return "\n\n".join(blocks)
 
 

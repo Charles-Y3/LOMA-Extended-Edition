@@ -202,6 +202,12 @@ def check_fetch_allowed(url: str) -> tuple[bool, str]:
     if not parsed.netloc:
         return False, "Invalid URL."
 
+    from services.security.policy_gate import decide
+
+    verdict = decide("fetch_url", url=url)
+    if not verdict.allowed:
+        return False, verdict.reason
+
     domain = _domain_key(url)
     allowed, reason = _apply_rate_limit(domain)
     if not allowed:

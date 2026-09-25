@@ -124,6 +124,22 @@ _DISALLOWED_METHODS = frozenset(
         "to_parquet",
         "to_clipboard",
         "to_feather",
+        # more pandas writers that accept a file path/buffer, and file-reading helpers (pd is in the
+        # namespace, so pd.read_pickle(...) would execute pickle code and pd.read_csv(path) would read
+        # any file) -- see also the "read_" prefix rule in validate_code().
+        "to_markdown",
+        "to_html",
+        "to_latex",
+        "to_xml",
+        "to_stata",
+        "to_orc",
+        "to_gbq",
+        "to_string",
+        "to_xarray",
+        "io",
+        "read",
+        "load",
+        "loads",
     }
 )
 
@@ -183,7 +199,7 @@ def validate_code(code: str) -> tuple[bool, str]:
         if isinstance(node, ast.Attribute):
             if node.attr.startswith("__"):
                 return False, f"disallowed attribute: {node.attr}"
-            if node.attr in _DISALLOWED_METHODS:
+            if node.attr in _DISALLOWED_METHODS or node.attr.startswith("read_"):
                 return False, f"disallowed method: {node.attr}"
         # .agg()/.aggregate() may only name aggregations as constant strings —
         # callables can't sneak in (Lambda/FunctionDef aren't allowlisted anyway).
