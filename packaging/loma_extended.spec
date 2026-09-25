@@ -233,6 +233,28 @@ hiddenimports += [
     'diffusers.pipelines.stable_diffusion_xl',
     'gguf',
 ]
+# transformers and diffusers are lazy-import packages: `from transformers import
+# CLIPImageProcessor` resolves to transformers.models.clip.image_processing_clip only at
+# runtime, which PyInstaller's static analysis never sees, so the frozen app was missing them and
+# every Stable-Diffusion generation failed with "Could not import module 'CLIPImageProcessor'"
+# (found by the Mac end-to-end image test; the app then saved the error to a .txt and said
+# "Image ready"). Bundle everything the SD pipeline (CLIP text encoder/tokenizer/image
+# processor, schedulers, UNet/VAE models, LoRA loaders) pulls in lazily. main.py's
+# /loma-selftest route (LOMA_SELFTEST=1) imports these and the build's smoke test fails if not.
+hiddenimports += collect_submodules('transformers.models.clip')
+hiddenimports += [
+    'transformers.image_processing_utils',
+    'transformers.image_processing_base',
+    'transformers.image_transforms',
+    'transformers.image_utils',
+    'transformers.processing_utils',
+    'transformers.feature_extraction_utils',
+]
+hiddenimports += collect_submodules('diffusers.schedulers')
+hiddenimports += collect_submodules('diffusers.models')
+hiddenimports += collect_submodules('diffusers.loaders')
+hiddenimports += collect_submodules('diffusers.pipelines.stable_diffusion')
+hiddenimports += collect_submodules('diffusers.pipelines.stable_diffusion_xl')
 
 if sys.platform == 'win32':
     hiddenimports += ['win32com.client']

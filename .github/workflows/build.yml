@@ -265,6 +265,10 @@ jobs:
             *'"online":true'*) ;;
             *) echo "frozen app could not make a verified HTTPS request: $selftest"; exit 1 ;;
           esac
+          case "$selftest" in
+            *'"image_imports":"ok"'*) ;;
+            *) echo "frozen app cannot import the image-generation libraries: $selftest"; exit 1 ;;
+          esac
 
       - name: Add LICENSE, README, and user guides alongside the .app
         # The plain onedir folder ("dist/LOMA Extended Edition/") is NOT what gets

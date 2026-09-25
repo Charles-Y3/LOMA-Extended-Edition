@@ -403,7 +403,17 @@ if os.environ.get("LOMA_SELFTEST") == "1":
         from services.bootstrap.connectivity import check_connectivity
 
         conn = check_connectivity()
-        return {"online": conn.online, "reason": conn.reason}
+        # The Stable-Diffusion stack imports these lazily; a frozen build that missed them fails
+        # every image generation, so surface it here (the build's smoke test checks this).
+        image_imports = "ok"
+        try:
+            from diffusers import DPMSolverMultistepScheduler, LCMScheduler, StableDiffusionPipeline  # noqa: F401
+            from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer  # noqa: F401
+        except Exception:
+            import traceback
+
+            image_imports = traceback.format_exc()[-700:]
+        return {"online": conn.online, "reason": conn.reason, "image_imports": image_imports}
 
 
 @ui.page("/")
