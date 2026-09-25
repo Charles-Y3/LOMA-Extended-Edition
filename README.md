@@ -1,6 +1,6 @@
 # LOMA Extended Edition — Local Orchestrated Multimodal Automation
 
-**Version 1.0.0** — available for Windows and macOS (Apple Silicon).
+**Version 1.0.1** — available for Windows and macOS (Apple Silicon).
 
 Privacy-first local agentic workstation. Extended Edition builds on Core Edition with
 guided web research, a live news brief, and a general-purpose web viewer, so LOMA can ground
