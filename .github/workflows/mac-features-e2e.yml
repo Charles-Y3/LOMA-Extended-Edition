@@ -102,7 +102,7 @@ jobs:
           # gate false-positives on them (see pipeline/image_safety_embeddings.py: bare "image"
           # scores 0.859 vs the 0.85 threshold). A 1.5B model writes real descriptive prompts.
           ollama pull qwen2.5:1.5b
-          CHAT_MODEL=qwen2.5:1.5b LOMA_E2E_WIZARD_STEP=image LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-torch bash tests/e2e/mac_feature_run.sh image feature_e2e.py webkit 1
+          CHAT_MODEL=qwen2.5:1.5b LOMA_E2E_WIZARD_STEP=image LOMA_TORCH_DEVICE=cpu LOMA_E2E_IMAGE_MODEL=hf-internal-testing/tiny-stable-diffusion-torch bash tests/e2e/mac_feature_run.sh image feature_e2e.py webkit 1
 
       - name: news_brief - live web search + brief (heavy)
         if: always() && steps.pick.outputs.news_brief == 'yes'

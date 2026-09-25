@@ -32,6 +32,13 @@ def resolve_torch_device() -> str:
     """Best available torch device for model placement: 'cuda' > 'mps' > 'cpu'.
     Single source of truth so image/music/voice-clone services agree with each other
     (and with the hardware profile) on what backend is actually in use."""
+    import os
+
+    forced = os.environ.get("LOMA_TORCH_DEVICE", "").strip().lower()
+    if forced in ("cpu", "cuda", "mps"):
+        # Escape hatch / CI hook: GitHub's virtualized Mac GPU rejects 4 GiB Metal buffers
+        # ("Invalid buffer size"), so the packaged-app tests force CPU there.
+        return forced
     try:
         import torch
     except ImportError:
