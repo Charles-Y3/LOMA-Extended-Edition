@@ -412,7 +412,7 @@ if os.environ.get("LOMA_SELFTEST") == "1":
         except Exception:
             import traceback
 
-            image_imports = traceback.format_exc()[-700:]
+            image_imports = traceback.format_exc()[-4500:]
             def _direct_clip():
                 try:
                     from transformers.models.clip.image_processing_clip import CLIPImageProcessor as _c  # noqa: F401
