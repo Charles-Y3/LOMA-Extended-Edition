@@ -413,6 +413,13 @@ if os.environ.get("LOMA_SELFTEST") == "1":
             import traceback
 
             image_imports = traceback.format_exc()[-700:]
+            def _direct_clip():
+                try:
+                    from transformers.models.clip.image_processing_clip import CLIPImageProcessor as _c  # noqa: F401
+                    return "ok"
+                except Exception:
+                    return traceback.format_exc()[-600:].replace(chr(10), " | ")
+
             try:
                 import transformers as _tf
                 from transformers.utils import import_utils as _iu
@@ -422,7 +429,8 @@ if os.environ.get("LOMA_SELFTEST") == "1":
                     f" | DIAG clip_dir={sorted(os.listdir(_d)) if os.path.isdir(_d) else 'MISSING'}"
                     f" torchvision={_iu.is_torchvision_available()} vision={_iu.is_vision_available()}"
                     f" torch={_iu.is_torch_available()}"
-                    f" clip_struct_keys={list(getattr(sys.modules.get('transformers.models.clip'), '_import_structure', {}))[:12]}"
+                    f" models_dir={sorted(os.listdir(os.path.dirname(_d)))[:20]}"
+                    f" direct={_direct_clip()}"
                 )
             except Exception as _e:
                 image_imports += f" | DIAG failed: {_e!r}"
