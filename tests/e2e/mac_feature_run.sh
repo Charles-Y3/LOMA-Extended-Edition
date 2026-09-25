@@ -34,7 +34,7 @@ for v in LOMA_E2E_PICK_FOLDER LOMA_E2E_WIZARD_STEP LOMA_E2E_IMAGE_MODEL LOMA_TOR
 done
 
 echo "=== $NAME ($SCRIPT, $ENGINE) ==="
-env -i HOME="$H" PATH=/usr/bin:/bin:/usr/sbin:/sbin LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 "${extra[@]}" \
+env -i HOME="$H" PATH=/usr/bin:/bin:/usr/sbin:/sbin LOMA_PORT=8765 LOMA_BROWSER_OPENED=1 LOMA_E2E_KEEP_ALIVE=1 "${extra[@]}" \
   "$APP" > "$RUNNER_TEMP/app-$NAME.log" 2>&1 &
 APP_PID=$!
 for i in $(seq 1 120); do curl -sf http://127.0.0.1:8765/ >/dev/null && break; sleep 1; done

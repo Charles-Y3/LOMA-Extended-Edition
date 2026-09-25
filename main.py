@@ -195,7 +195,10 @@ def _on_client_disconnect() -> None:
 
     import threading
 
-    threading.Timer(8.0, _maybe_quit).start()
+    # 45 s, not 8: a busy machine (model loading, first-run downloads) can starve the event loop long
+    # enough that the browser needs longer than 8 s to reconnect after a reload; quitting then left the
+    # user staring at "Connection lost". Closing the tab still ends the app, just a little later.
+    threading.Timer(45.0, _maybe_quit).start()
 
 
 app.on_disconnect(_on_client_disconnect)
