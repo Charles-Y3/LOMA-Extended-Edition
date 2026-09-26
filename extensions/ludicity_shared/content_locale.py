@@ -124,6 +124,16 @@ def localize_puzzle_fields(puzzle: dict[str, Any]) -> dict[str, Any]:
     return _cache_set(ck, out)
 
 
+def cached_history_encounter(enc: Any) -> dict[str, Any]:
+    """Title/era/category for panel labels: the localized copy if start_encounter already
+    produced it (cached), else the English source. Never calls the LLM, so it is safe to use
+    while rendering the UI."""
+    hit = _cache_get(f"history:{enc.id}")
+    if isinstance(hit, dict):
+        return hit
+    return {"title": enc.title, "era": enc.era, "region": enc.region, "category": enc.category}
+
+
 def localize_history_encounter(enc: Any) -> dict[str, Any]:
     """Localized encounter fields for workspace chat display."""
     from extensions.history_events.encounter_backgrounds import chat_background_for

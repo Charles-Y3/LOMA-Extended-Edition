@@ -3,6 +3,7 @@ import asyncio
 
 from nicegui import background_tasks, ui
 
+from pipeline.i18n import t as tr
 from services.session import state
 from ui.themes import registry
 
@@ -1333,7 +1334,7 @@ def _schedule_sources_refresh(refresh_callback, sender) -> None:
             await asyncio.sleep(0.05)
         if len(state.active_context_files) > 5:
             state.active_context_files[:] = state.active_context_files[:5]
-            ui.notify("Document list capped at 5 max.", color="warning")
+            ui.notify(tr("ui.doc_list_capped"), color="warning")
         if hasattr(sender, "reset"):
             sender.reset()
         refresh_callback.refresh()
@@ -1348,7 +1349,7 @@ async def handle_file_uploaded_pipeline(e, refresh_callback) -> None:
     from services.session import handlers
 
     if len(state.active_context_files) >= 5:
-        ui.notify("Document context overflow! Max 5 files allowed.", color="negative")
+        ui.notify(tr("ui.doc_overflow"), color="negative")
         if handlers.active_upload_count == 0 and hasattr(e.sender, "reset"):
             e.sender.reset()
         return

@@ -577,7 +577,9 @@ class SetupWizard:
                 label = f"{entry.get('label', name)} ({entry.get('size', '?')})"
                 cb = ui.checkbox(label).props("dense")
                 checks[name] = cb
-                desc = (entry.get("desc") or "").strip()
+                from services.catalog_i18n import localized_desc
+
+                desc = localized_desc(entry)
                 if desc:
                     ui.label(desc).classes("text-[10px] text-gray-500 italic ml-6 -mt-1 mb-2")
 

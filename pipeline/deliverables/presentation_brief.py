@@ -154,7 +154,9 @@ def build_presentation_brief(query: str, *, has_source_data: bool = False) -> Pr
         if len(words) <= 3:
             title = q[:1].upper() + q[1:] if q else ""
             if not title.lower().startswith(("create", "make", "build", "presentation")):
-                title = f"The Power of {title}" if len(words) == 1 else q.title()
+                from pipeline.i18n import t as tr
+
+                title = tr("deck.power_of", topic=title) if len(words) == 1 else q.title()
         else:
             title = re.split(r"[.!?\n]", q, maxsplit=1)[0].strip()[:80]
     brief = PresentationBrief(

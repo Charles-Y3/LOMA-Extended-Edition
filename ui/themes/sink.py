@@ -6,6 +6,7 @@ from nicegui import ui
 
 from pipeline.state_machine import UISink
 from services.session import state
+from pipeline.i18n import t as _tr  # noqa: E402
 
 
 class NiceGUIStateSink(UISink):
@@ -143,7 +144,7 @@ class NiceGUIStateSink(UISink):
         try:
             from ui.components.loma_notify import notify
 
-            notify("Draft ready — see chat above.", color="positive")
+            notify(_tr("notify.draft_ready"), color="positive")
         except Exception:
             pass
 
@@ -153,7 +154,7 @@ class NiceGUIStateSink(UISink):
         try:
             from ui.components.loma_notify import notify
 
-            notify(f"Ready: {os.path.basename(path) if path else 'file'}", color="positive")
+            notify(_tr("notify.file_ready", name=os.path.basename(path) if path else _tr("notify.file_generic")), color="positive")
         except Exception:
             pass
 

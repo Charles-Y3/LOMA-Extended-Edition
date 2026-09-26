@@ -22,6 +22,7 @@ from pipeline.direct.task_roles import get_task_role, mutation_role_ids
 from pipeline.direct.output_constraints import build_constraint_text
 from pipeline.direct.prompt_hygiene import looks_like_refusal, user_step_content
 from pipeline.output_format import deliverable_display_name, EXTENSION_BY_TYPE, normalize_output_type
+from pipeline.i18n import t as _tr  # noqa: E402
 
 CAPABILITY_ID = "direct_pipeline"
 
@@ -1022,7 +1023,7 @@ def _run_image_composite(
         )
     except Exception as ex:
         sink.log(f"Image composite failed: {ex}")
-        sink.set_assistant_content(f"Image composite failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_composite", error=ex))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": str(ex)}
 
@@ -1040,9 +1041,11 @@ def _run_image_composite(
         brief = (user_query or "").strip()
         if len(brief) > 220:
             brief = brief[:217] + "…"
+        from pipeline.i18n import t as tr
+
         msg = (
-            f"**Composite:** {brief}\n\n"
-            f"✅ **Image ready** — `{os.path.basename(path)}`."
+            f"**{tr('chat.image_composite_label')}** {brief}\n\n"
+            f"✅ **{tr('chat.image_ready')}** — `{os.path.basename(path)}`."
         )
         sink.set_assistant_content(msg)
         if state.messages and state.messages[-1].get("role") == "assistant":
@@ -1134,7 +1137,7 @@ def _run_image_mutation(
 
     paths = _image_paths_from_bundle(bundle)
     if not paths:
-        sink.set_assistant_content("No source image found to edit — attach an image first.")
+        sink.set_assistant_content(_tr("chat.no_source_image"))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": "no source image"}
 
@@ -1169,7 +1172,7 @@ def _run_image_mutation(
         )
     except Exception as ex:
         sink.log(f"Image edit failed: {ex}")
-        sink.set_assistant_content(f"Image edit failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_edit", error=ex))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": str(ex)}
 
@@ -1194,9 +1197,11 @@ def _run_image_mutation(
         brief = (user_query or "").strip()
         if len(brief) > 220:
             brief = brief[:217] + "…"
+        from pipeline.i18n import t as tr
+
         msg = (
-            f"**Edit:** {brief}\n\n"
-            f"✅ **Image ready** — `{os.path.basename(path)}`."
+            f"**{tr('chat.image_edit_label')}** {brief}\n\n"
+            f"✅ **{tr('chat.image_ready')}** — `{os.path.basename(path)}`."
         )
         sink.set_assistant_content(msg)
         if state.messages and state.messages[-1].get("role") == "assistant":
@@ -1305,7 +1310,7 @@ def _run_poster_generation(
 
         offer_image_gen_installer()
         sink.set_assistant_content(
-            "Image generation requires Diffusers and PyTorch. Use the installer dialog."
+            _tr("chat.imagegen_requires")
         )
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image"}
@@ -1341,12 +1346,12 @@ def _run_poster_generation(
         return {"content": "", "path": "", "output_type": "image"}
     except Exception as ex:
         sink.log(f"Poster generation failed: {ex}")
-        sink.set_assistant_content(f"Poster generation failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_poster", error=ex))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": str(ex)}
 
     if result.fallback or not os.path.exists(result.path):
-        sink.set_assistant_content(f"⚠️ Couldn't generate the poster: {result.error or 'unknown error'}")
+        sink.set_assistant_content(_tr("chat.cant_poster", error=result.error or _tr("chat.unknown_error")))
         sink.refresh_chat()
         return {"content": user_query, "path": result.path, "output_type": "image", "error": result.error}
 
@@ -1375,12 +1380,12 @@ def _run_diagram_generation(
         result, limitation_note = generate_diagram(user_query, prof=prof, model=model, context=context)
     except Exception as ex:
         sink.log(f"Diagram generation failed: {ex}")
-        sink.set_assistant_content(f"Diagram generation failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_diagram", error=ex))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": str(ex)}
 
     if not os.path.exists(result.path):
-        sink.set_assistant_content("⚠️ Couldn't generate the diagram.")
+        sink.set_assistant_content(_tr("chat.cant_diagram"))
         sink.refresh_chat()
         return {"content": user_query, "path": result.path, "output_type": "image", "error": "render failed"}
 
@@ -1423,12 +1428,12 @@ def _run_infographic_generation(
         result = generate_fn(user_query, prof=prof, model=model, context=context)
     except Exception as ex:
         sink.log(f"Infographic generation failed: {ex}")
-        sink.set_assistant_content(f"Infographic generation failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_infographic", error=ex))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": str(ex)}
 
     if result.fallback or not os.path.exists(result.path):
-        sink.set_assistant_content(f"⚠️ Couldn't generate the infographic: {result.error or 'unknown error'}")
+        sink.set_assistant_content(_tr("chat.cant_infographic", error=result.error or _tr("chat.unknown_error")))
         sink.refresh_chat()
         return {"content": user_query, "path": result.path, "output_type": "image", "error": result.error}
 
@@ -1460,12 +1465,12 @@ def _run_chart_generation(
         result = generate_chart(user_query, prof=prof, model=model, context=context, sources=sources)
     except Exception as ex:
         sink.log(f"Chart generation failed: {ex}")
-        sink.set_assistant_content(f"Chart generation failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_chart", error=ex))
         sink.refresh_chat()
         return {"content": user_query, "path": "", "output_type": "image", "error": str(ex)}
 
     if not os.path.exists(result.path):
-        sink.set_assistant_content("⚠️ Couldn't generate the chart.")
+        sink.set_assistant_content(_tr("chat.cant_chart"))
         sink.refresh_chat()
         return {"content": user_query, "path": result.path, "output_type": "image", "error": "render failed"}
 
@@ -1508,7 +1513,7 @@ def _run_image_generation(
 
         offer_image_gen_installer()
         sink.set_assistant_content(
-            "Image generation requires Diffusers and PyTorch. Use the installer dialog."
+            _tr("chat.imagegen_requires")
         )
         sink.refresh_chat()
         return {"content": body, "path": "", "output_type": "image"}
@@ -1537,7 +1542,7 @@ def _run_image_generation(
 
     # Check the user's own request too, not just what the authoring model wrote: a small
     # authoring model can launder "without clothes" into a euphemistic prompt that passes.
-    if is_explicit_prompt(user_query) or is_explicit_prompt(prompt):
+    if is_explicit_prompt(user_query, use_embeddings=False) or is_explicit_prompt(prompt):
         from pipeline.i18n import t as tr
 
         sink.set_assistant_content(tr("chat.image_explicit_declined"))
@@ -1661,7 +1666,7 @@ def _run_image_generation(
         return {"content": prompt, "path": "", "output_type": "image", "cancelled": True}
     except Exception as ex:
         sink.log(f"Image generation failed: {ex}")
-        sink.set_assistant_content(f"Image generation failed: {ex}")
+        sink.set_assistant_content(_tr("chat.failed_image", error=ex))
         sink.refresh_chat()
         return {"content": prompt, "path": "", "output_type": "image", "error": str(ex)}
 
@@ -1694,9 +1699,11 @@ def _run_image_generation(
             from pipeline.i18n import t as tr
 
             caveat = f"\n\n{tr('chat.image_multi_subject_caveat')}"
+        from pipeline.i18n import t as tr
+
         msg = (
-            f"**Image prompt:**\n{prompt}\n\n"
-            f"✅ **Image ready** — `{os.path.basename(path)}`.\n\n"
+            f"**{tr('chat.image_prompt_label')}**\n{prompt}\n\n"
+            f"✅ **{tr('chat.image_ready')}** — `{os.path.basename(path)}`.\n\n"
             f"{regen_hint}{caveat}"
         )
         sink.set_assistant_content(msg)
@@ -1918,9 +1925,9 @@ def run_direct_pipeline(
             sink.set_assistant_content(preview)
             sink.refresh_chat()
         else:
-            sink.set_assistant_content(
-                "⏳ **Processing your file** — applying changes. See Preview for live progress."
-            )
+            from pipeline.i18n import t as tr
+
+            sink.set_assistant_content(tr("deck.processing_file"))
         from services.session import draft as draft_sync
 
         draft_sync.set_draft(preview or "⏳ Processing…", deliverable_ot, "mutation")
@@ -2233,9 +2240,9 @@ def run_direct_pipeline(
                 theme = resolve_theme(query=request.user_input, design=spec.design)
                 working_text = theme_meta_block(theme) + "\n\n" + spec.to_markdown()
                 step_out = working_text
-                sink.set_assistant_content(
-                    f"📋 **Deck planned** — {len(spec.slides)} slides. Compiling presentation…"
-                )
+                from pipeline.i18n import t as tr
+
+                sink.set_assistant_content(tr("deck.planned", n=len(spec.slides)))
                 sink.refresh_chat()
         if (
             output_type == "presentation"
@@ -2313,9 +2320,9 @@ def run_direct_pipeline(
                     presentation_chat_summary(summary_src, artifact_name=name)
                 )
             else:
-                sink.set_assistant_content(
-                    f"✅ **{label} ready** — `{name}`."
-                )
+                from pipeline.i18n import t as tr
+
+                sink.set_assistant_content(tr("deck.output_ready", label=label, name=name))
             sink.notify_artifact_ready(path)
             sink.sync_preview()
 

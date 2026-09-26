@@ -12,6 +12,7 @@ from pipeline.workflow import start_loma_workflow
 from pipeline.base import profile_pack as profile_service
 from services.session import settings as session_settings
 from services.session import state
+from pipeline.i18n import t as _tr  # noqa: E402
 
 UPLOAD_DIR = os.path.join("data", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -155,8 +156,7 @@ def _preflight_and_start_workflow(
             offer_vision_installer(_resume)
             if state.messages and state.messages[-1].get("role") == "assistant":
                 state.messages[-1]["content"] = (
-                    "You attached an image but no vision model is installed. "
-                    "Use the installer to download one; LOMA will run your message when it finishes."
+                    _tr("chat.vision_missing")
                 )
                 state.messages[-1].pop("processing", None)
             ui_module.render_chat.refresh()
@@ -235,7 +235,7 @@ def on_chat_input_change(_=None) -> None:
 async def _store_and_attach_file(file_name: str, content_bytes: bytes | None) -> None:
     if content_bytes is None:
         state.add_log(f"Upload Error: Empty payload for {file_name}")
-        ui.notify("Could not read upload payload structure.", color="negative")
+        ui.notify(_tr("notify.upload_unreadable"), color="negative")
         return
     filepath = os.path.join(UPLOAD_DIR, file_name)
     with open(filepath, "wb") as f:
@@ -257,24 +257,24 @@ async def _store_and_attach_file(file_name: str, content_bytes: bytes | None) ->
                     state.add_log(f"Context successfully populated: {file_name}")
                     if parsed_data.get("type") in ("media_audio", "media_video"):
                         ui.notify(
-                            f"Attached {file_name}. LOMA will use an audio-capable model or local transcription.",
+                            _tr("notify.attached_media", name=file_name),
                             color="positive",
                         )
                     else:
-                        ui.notify(f"Loaded {file_name} into active workspace memory.", color="positive")
+                        ui.notify(_tr("notify.loaded_file", name=file_name), color="positive")
                     if parsed_data.get("type") == "image":
                         _prewarm_vision_model_async()
                 else:
-                    ui.notify(f"Capped: '{file_name}' exceeded maximum allowance.", color="warning")
+                    ui.notify(_tr("notify.capped", name=file_name), color="warning")
             else:
-                ui.notify(f"'{file_name}' is already attached as a source.", color="warning")
+                ui.notify(_tr("notify.already_attached", name=file_name), color="warning")
     else:
         reason = parsed_data.get("content", "Unknown parsing error") if parsed_data else "Empty response"
         state.add_log(f"Failed parsing: {file_name} -> {reason}")
         from services.capability.gap_handler import handle_transcription_error_message
 
         if not handle_transcription_error_message(reason):
-            ui.notify(f"Could not parse data contents from {file_name}.", color="negative")
+            ui.notify(_tr("notify.parse_failed", name=file_name), color="negative")
 
 
 async def handle_file_upload(e) -> None:
@@ -307,10 +307,10 @@ async def handle_file_upload(e) -> None:
                 await _store_and_attach_file(file_name, content_bytes)
         else:
             state.add_log("Upload Error: Event object structure unreadable")
-            ui.notify("Could not read upload payload structure.", color="negative")
+            ui.notify(_tr("notify.upload_unreadable"), color="negative")
     except Exception as ex:
         state.add_log(f"Critical Exception inside Upload Handler: {str(ex)}")
-        ui.notify(f"Upload process failed: {str(ex)}", color="negative")
+        ui.notify(_tr("notify.upload_failed", error=str(ex)), color="negative")
     finally:
         with upload_lock:
             active_upload_count -= 1
@@ -405,4 +405,4 @@ def reboot_workspace(render_chat_fn, render_progress_fn, render_sources_hub_fn) 
         pass
     # #endregion
 
-    ui.notify("Workspace rebooted.", color="info")
+    ui.notify(_tr("notify.workspace_rebooted"), color="info")

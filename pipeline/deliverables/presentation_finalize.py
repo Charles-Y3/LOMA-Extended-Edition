@@ -18,6 +18,7 @@ from pipeline.deliverables.presentation_deck import (
 from pipeline.deliverables.presentation_limits import MAX_BULLET_CHARS, MAX_BULLETS_PER_SLIDE
 from pipeline.deliverables.presentation_theme import resolve_theme
 from pipeline.deliverables.specs import infer_slide_count
+from pipeline.i18n import t as tr
 from pipeline.schemas.task_schema import AgenticPlan
 
 _SLIDE_MARKER = re.compile(r"^---\s*Slide\s+\d+\s*---\s*$", re.MULTILINE | re.IGNORECASE)
@@ -84,17 +85,17 @@ def presentation_chat_summary(markdown: str, artifact_name: str = "") -> str:
     _ = theme
     blocks = split_presentation_slides(body)
     n = len(blocks)
-    lines = [f"✅ **Presentation ready** — {n} slide{'s' if n != 1 else ''}."]
+    lines = [tr("deck.ready_one" if n == 1 else "deck.ready_other", n=n)]
     if artifact_name:
         lines[0] += f" `{artifact_name}`."
     lines.append("")
     for i, block in enumerate(blocks[:10], start=1):
-        title = _block_title(block) or f"Slide {i}"
+        title = _block_title(block) or tr("deck.slide_label", i=i)
         bullet_n = len([ln for ln in block.splitlines() if ln.strip().startswith("- ")])
-        extra = f" ({bullet_n} bullets)" if bullet_n and i > 1 else ""
+        extra = f" {tr('deck.bullets_count', n=bullet_n)}" if bullet_n and i > 1 else ""
         if i == 1 and bullet_n <= 1:
-            extra = " (title slide)"
-        lines.append(f"- **Slide {i}:** {title}{extra}")
+            extra = f" {tr('deck.title_slide_tag')}"
+        lines.append(f"- **{tr('deck.slide_label', i=i)}:** {title}{extra}")
     return "\n".join(lines)
 
 
@@ -176,7 +177,7 @@ def _deck_from_themes(
         content_themes = themes[1:] if len(themes) > 1 else themes
 
     while len(content_themes) < max(1, slide_count - 1):
-        content_themes.append((f"Key idea {len(content_themes) + 1}", "Supporting point for the topic."))
+        content_themes.append((tr("deck.key_idea_n", n=len(content_themes) + 1), tr("deck.supporting_point")))
 
     slides.append(
         SlideSpec(index=1, layout="title", title=deck_title, subtitle=subtitle, bullets=[])
@@ -260,8 +261,8 @@ def _minimal_deck(query: str, slide_count: int) -> DeckSpec:
             SlideSpec(
                 index=i,
                 layout="content",
-                title=f"Section {i - 1}",
-                bullets=[f"Add key point {j} for this topic." for j in range(1, 4)],
+                title=tr("deck.section", n=i - 1),
+                bullets=[tr("deck.add_key_point", j=j) for j in range(1, 4)],
             )
         )
     return DeckSpec(deck_title=title, slides=slides, design={})
@@ -306,14 +307,14 @@ def _infer_deck_title(query: str) -> str:
     m2 = re.search(r"on\s+(.+?)(?:\s*$|\s+\d)", q, re.I)
     if m2:
         return _truncate(m2.group(1).strip().title(), 70)
-    return _truncate(q[:70] or "Presentation", 70)
+    return _truncate(q[:70] or tr("deck.default_title"), 70)
 
 
 def _infer_subtitle(query: str) -> str:
     if "beautiful" in (query or "").lower():
-        return "A thoughtful visual journey"
+        return tr("deck.subtitle_visual")
     if "kindness" in (query or "").lower():
-        return "Compassion in everyday life"
+        return tr("deck.subtitle_kindness")
     return ""
 
 

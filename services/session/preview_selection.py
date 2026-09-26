@@ -9,6 +9,7 @@ import time
 from nicegui import ui
 
 from services.session import state
+from pipeline.i18n import t as _tr  # noqa: E402
 
 PREVIEW_EDITOR_ID = "loma-preview-editor"
 
@@ -184,8 +185,8 @@ def update_selection_ui() -> None:
     if status is not None:
         if sel:
             preview = sel if len(sel) <= 120 else sel[:117] + "…"
-            status.set_text(f"Selected ({len(sel):,} chars): “{preview}”")
+            status.set_text(_tr("preview.selected", count=f"{len(sel):,}", preview=preview))
         else:
-            status.set_text("Highlight text in the draft to revise a passage.")
+            status.set_text(_tr("preview.highlight_hint"))
     if row is not None:
         row.set_visibility(bool(sel))

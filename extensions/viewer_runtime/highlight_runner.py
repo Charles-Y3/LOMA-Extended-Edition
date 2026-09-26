@@ -13,6 +13,7 @@ from pipeline.workflow import build_pipeline_config, build_pipeline_inputs
 from services.session import prompt_memory
 from services.session import state
 from ui.themes.sink import NiceGUIStateSink
+from pipeline.i18n import t as _tr  # noqa: E402
 
 _VIEWER_LABELS = {
     "document_editor": "Document editor",
@@ -99,7 +100,7 @@ def _run_highlight_answer(
     excerpt = extract_highlight_excerpt(full_query)
     task = (instruction or "").strip()
     if not excerpt or not task:
-        sink.set_assistant_content("No excerpt or instruction to process.")
+        sink.set_assistant_content(_tr("chat.no_excerpt"))
         sink.refresh_chat()
         on_workflow_failed(sink)
         return
@@ -211,7 +212,7 @@ def _run_highlight_answer(
         # blank — set_assistant_content("") above already cleared it and nothing
         # downstream ever repopulates it. Surface the real error instead.
         sink.log(f"{label} highlight answer failed: {exc}")
-        sink.set_assistant_content(f"⚠️ Could not generate a response: {exc}")
+        sink.set_assistant_content(_tr("chat.cant_respond", error=exc))
         sink.refresh_chat()
         on_workflow_failed(sink)
         return
@@ -247,7 +248,7 @@ def _run_kv_answer(
     excerpt = extract_highlight_excerpt(full_query)
     task = (instruction or "").strip()
     if not excerpt or not task:
-        sink.set_assistant_content("No excerpt or instruction to process.")
+        sink.set_assistant_content(_tr("chat.no_excerpt"))
         sink.refresh_chat()
         on_workflow_failed(sink)
         return

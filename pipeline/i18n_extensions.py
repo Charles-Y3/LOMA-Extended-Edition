@@ -2881,3 +2881,23 @@ def merge_into(translations: dict[str, dict[str, str]]) -> None:
 
     for locale, keys in SECURITY_STRINGS.items():
         translations.setdefault(locale, {}).update(keys)
+    from pipeline.i18n_catalog import CATALOG_STRINGS
+
+    for locale, keys in CATALOG_STRINGS.items():
+        translations.setdefault(locale, {}).update(keys)
+    from pipeline.i18n_messages import MESSAGE_STRINGS
+
+    for locale, keys in MESSAGE_STRINGS.items():
+        translations.setdefault(locale, {}).update(keys)
+    from pipeline.i18n_deck import DECK_STRINGS
+
+    for locale, keys in DECK_STRINGS.items():
+        translations.setdefault(locale, {}).update(keys)
+    from pipeline.i18n_ui_misc import UI_MISC_STRINGS
+
+    for locale, keys in UI_MISC_STRINGS.items():
+        translations.setdefault(locale, {}).update(keys)
+    from pipeline.i18n_installer import INSTALLER_STRINGS
+
+    for locale, keys in INSTALLER_STRINGS.items():
+        translations.setdefault(locale, {}).update(keys)

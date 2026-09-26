@@ -62,7 +62,7 @@ def _render_figures_at_end(slots: list[tuple[int, str]], *, allow_images: bool) 
             "w-full max-w-full max-h-[56rem] rounded-lg border border-white/10 my-2 cursor-pointer "
             "hover:opacity-90 transition-opacity"
         ).on("click", _open).tooltip(tr("chat.figure_open_tooltip"))
-        ui.label(f"Figure {slot}: {label}").classes("text-[11px] opacity-70")
+        ui.label(tr("ui.figure_caption", slot=slot, label=label)).classes("text-[11px] opacity-70")
 
 
 def _chat_font_px() -> int:
@@ -514,7 +514,7 @@ def render_chat() -> None:
                         expansion_props = "dense header-class=text-gray-400"
                         if is_live_assistant:
                             expansion_props += " default-opened"
-                        with ui.expansion("Reasoning", icon="psychology").classes(
+                        with ui.expansion(tr("ui.reasoning"), icon="psychology").classes(
                             "w-full text-[11px] opacity-80"
                         ).props(expansion_props):
                             ui.markdown(msg["thinking"]).classes(

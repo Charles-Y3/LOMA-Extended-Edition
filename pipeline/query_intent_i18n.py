@@ -1154,6 +1154,42 @@ CONCEPTS["explicit_nudity_request"] = {
 }
 
 
+# Standard slide titles, in every supported language — used by pipeline/deck_i18n.py to recognise a
+# deck's agenda and closing slides no matter which language the deck (or the model) is written in.
+CONCEPTS["deck_agenda_title"] = {
+    "en": ("agenda", "outline", "table of contents", "contents"),
+    "zh_tw": ("議程", "大綱", "目錄", "提綱", "簡報大綱"),
+    "zh_cn": ("议程", "大纲", "目录", "提纲", "演示大纲"),
+    "es": ("agenda", "esquema", "índice", "indice", "temario", "contenido"),
+    "de": ("agenda", "gliederung", "inhalt", "überblick", "tagesordnung"),
+}
+# A slide whose WHOLE title is one of these is the deck's closing/summary slide.
+CONCEPTS["deck_closing_title"] = {
+    "en": ("conclusion", "summary", "key takeaways", "takeaways", "wrap-up", "closing"),
+    "zh_tw": ("結論", "總結", "摘要", "重點回顧", "重點整理"),
+    "zh_cn": ("结论", "总结", "摘要", "重点回顾", "重点整理"),
+    "es": ("conclusión", "conclusion", "resumen", "puntos clave", "cierre"),
+    "de": ("fazit", "zusammenfassung", "kernaussagen", "schlussfolgerung", "abschluss"),
+}
+# A title that merely CONTAINS one of these ("Practical takeaways", "Next steps for teams") is also closing.
+CONCEPTS["deck_closing_contains"] = {
+    "en": ("takeaway", "next steps"),
+    "zh_tw": ("重點回顧", "下一步"),
+    "zh_cn": ("重点回顾", "下一步"),
+    "es": ("puntos clave", "próximos pasos"),
+    "de": ("kernaussagen", "nächste schritte"),
+}
+
+
+CONCEPTS["topic_kindness"] = {
+    "en": ("kindness",),
+    "zh_tw": ("善良", "善意", "友善"),
+    "zh_cn": ("善良", "善意", "友善"),
+    "es": ("amabilidad", "bondad"),
+    "de": ("freundlichkeit", "güte"),
+}
+
+
 def matches(query: str, concept: str) -> bool:
     """True if `query` contains any phrase for `concept`, in any supported locale."""
     table = CONCEPTS.get(concept)

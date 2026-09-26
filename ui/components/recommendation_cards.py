@@ -9,6 +9,7 @@ from nicegui import ui
 from config.model_catalog import hardware_tag
 from pipeline.i18n import t
 from services.system.profiler import SystemProfile
+from pipeline.i18n import t as _tr  # noqa: E402
 
 
 def build_recommendation_cards(
@@ -47,7 +48,7 @@ def build_recommendation_cards(
     desc_box = ui.markdown("").classes("text-xs text-gray-500 italic mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded")
 
     def _update(val: str) -> None:
-        desc_box.set_content(f"**Details:** {descriptions.get(val, '')}")
+        desc_box.set_content(_tr("installer.vision_details", desc=descriptions.get(val, "")))
 
     radio.on_value_change(lambda e: _update(e.value))
     _update(default)

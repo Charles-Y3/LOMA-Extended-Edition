@@ -19,10 +19,10 @@ def submit_highlight_query(selected_text: str, source_label: str, instruction: s
     Must run on the NiceGUI UI thread (e.g. from highlight dialog button handler).
     """
     if not (selected_text or "").strip():
-        ui.notify("No highlighted text detected.", color="warning")
+        ui.notify(tr("ui.no_highlight"), color="warning")
         return
     if not (instruction or "").strip():
-        ui.notify("Describe what you want LOMA to do with the selection.", color="warning")
+        ui.notify(tr("ui.describe_selection"), color="warning")
         return
 
     clean = selected_text.strip()

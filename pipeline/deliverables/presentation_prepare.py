@@ -24,6 +24,7 @@ from pipeline.deliverables.presentation_theme import (
     theme_meta_block,
 )
 from pipeline.deliverables.specs import infer_slide_count
+from pipeline.i18n import t as tr
 from pipeline.validate.result import ValidationResult
 from services.presentation_markdown import (
     normalize_presentation_markdown,
@@ -354,7 +355,7 @@ def _fit_slide_count(parsed: list[dict], target: int, errors: list[str]) -> list
         head = parsed[: target - 1]
         tail = parsed[target - 1 :]
         merged = {
-            "title": tail[0].get("title") or "Summary",
+            "title": tail[0].get("title") or tr("deck.summary"),
             "bullets": [],
         }
         for slide in tail:
@@ -365,8 +366,8 @@ def _fit_slide_count(parsed: list[dict], target: int, errors: list[str]) -> list
     while len(parsed) < target:
         parsed.append(
             {
-                "title": "Key idea",
-                "bullets": ["Add supporting detail for this theme."],
+                "title": tr("deck.key_idea"),
+                "bullets": [tr("deck.supporting_detail")],
             }
         )
         errors.append(f"padded deck to {target} slides")

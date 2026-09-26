@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 
+from pipeline.i18n import t as _tr
 from services.graph_generation.dataset import load_dataframe
 from services.graph_generation.models import ChartArtifact
 
@@ -107,6 +108,10 @@ def render_charts_for_dataset(
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+
+        from services.graph_generation.fonts import configure_chart_fonts
+
+        configure_chart_fonts()
     except ImportError:
         return []
 
@@ -175,7 +180,7 @@ def render_charts_for_dataset(
             )
             fig, ax = plt.subplots(figsize=(9, 4.5))
             grp.plot(kind="bar", ax=ax, color="#2563eb")
-            ax.set_title(f"Average {metric_col} by {platform_col}")
+            ax.set_title(_tr("chart.avg_by", metric=metric_col, group=platform_col))
             ax.set_ylabel(metric_col)
             ax.tick_params(axis="x", rotation=30)
             fig.tight_layout()
@@ -183,7 +188,7 @@ def render_charts_for_dataset(
                 fig,
                 f"avg_{metric_col}_by_{platform_col}",
                 "bar_grouped",
-                caption=f"Compare how {metric_col} differs across {platform_col}.",
+                caption=_tr("chart.avg_caption", metric=metric_col, group=platform_col),
                 data_summary=_grouped_summary(grp),
             )
         except Exception:
@@ -197,13 +202,13 @@ def render_charts_for_dataset(
         series = df[count_metric].dropna()
         if len(series) > 0:
             ax.hist(series, bins=min(30, max(10, len(series) // 40)), color="#0d9488", edgecolor="white")
-            ax.set_title(f"Distribution of {count_metric}")
+            ax.set_title(_tr("chart.distribution", metric=count_metric))
             ax.set_xlabel(count_metric)
             _save(
                 fig,
                 f"distribution_{count_metric}",
                 "histogram",
-                caption=f"Spread and outliers in {count_metric}.",
+                caption=_tr("chart.distribution_caption", metric=count_metric),
                 data_summary=_distribution_summary(series),
             )
         else:
@@ -227,7 +232,7 @@ def render_charts_for_dataset(
                     legend=False,
                     colormap="tab20",
                 )
-                ax.set_title(f"Share of {share_metric} by {cat_col}")
+                ax.set_title(_tr("chart.share", metric=share_metric, cat=cat_col))
                 ax.set_ylabel("")
                 total = grp.sum()
                 pct_grp = (grp / total * 100) if total else grp
@@ -235,7 +240,7 @@ def render_charts_for_dataset(
                     fig,
                     f"pie_{share_metric}_by_{cat_col}",
                     "pie",
-                    caption=f"Proportional split of {share_metric} across {cat_col}.",
+                    caption=_tr("chart.share_caption", metric=share_metric, cat=cat_col),
                     data_summary=_grouped_summary(pct_grp, unit="%"),
                 )
         except Exception:
@@ -260,16 +265,16 @@ def render_charts_for_dataset(
                 if len(sub) >= 10:
                     coeffs = np.polyfit(sub[x_col].astype(float), sub[y_col].astype(float), 1)
                     xs = np.linspace(sub[x_col].min(), sub[x_col].max(), 50)
-                    ax.plot(xs, coeffs[0] * xs + coeffs[1], color="#dc2626", linewidth=2, label="trend")
+                    ax.plot(xs, coeffs[0] * xs + coeffs[1], color="#dc2626", linewidth=2, label=_tr("chart.trend_legend"))
                     ax.legend(loc="best", fontsize=8)
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
-                ax.set_title(f"{y_col} vs {x_col}")
+                ax.set_title(_tr("chart.vs", y=y_col, x=x_col))
                 _save(
                     fig,
                     f"scatter_{y_col}_vs_{x_col}",
                     "scatter",
-                    caption=f"Relationship between {x_col} and {y_col} (points + linear trend).",
+                    caption=_tr("chart.relationship_caption", x=x_col, y=y_col),
                     data_summary=_scatter_summary(sub, x_col, y_col),
                 )
         except Exception:
@@ -286,14 +291,14 @@ def render_charts_for_dataset(
             if len(sub) >= 3:
                 fig, ax = plt.subplots(figsize=(9, 4))
                 ax.plot(sub[date_col], sub[metric_col], color="#dc2626", linewidth=1.5)
-                ax.set_title(f"{metric_col} over time")
+                ax.set_title(_tr("chart.over_time", metric=metric_col))
                 ax.tick_params(axis="x", rotation=25)
                 fig.tight_layout()
                 _save(
                     fig,
                     f"{metric_col}_over_time",
                     "line",
-                    caption=f"Trend of {metric_col} by {date_col}.",
+                    caption=_tr("chart.trend_caption", metric=metric_col, date=date_col),
                     data_summary=_timeseries_summary(sub, date_col, metric_col),
                 )
         except Exception:
@@ -305,7 +310,7 @@ def render_charts_for_dataset(
         fig, ax = plt.subplots(figsize=(8, 4))
         series = df[col].dropna()
         ax.hist(series, bins=min(30, max(10, len(series) // 50)), color="#2563eb", edgecolor="white")
-        ax.set_title(f"{display}: distribution of {col}")
+        ax.set_title(_tr("chart.column_distribution", name=display, col=col))
         _save(fig, f"distribution_{col}", "histogram", data_summary=_distribution_summary(series))
 
     return artifacts
@@ -324,6 +329,10 @@ def render_charts_from_specs(
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+
+        from services.graph_generation.fonts import configure_chart_fonts
+
+        configure_chart_fonts()
     except ImportError:
         return []
 

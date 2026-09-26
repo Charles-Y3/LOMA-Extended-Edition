@@ -40,6 +40,9 @@ You are working in a large codebase. Optimize for minimal token usage.
 - All user-visible strings MUST use `from pipeline.i18n import t as tr` and `tr("key")`.
 - Add keys for en, zh_tw, and zh_cn in `pipeline/i18n.py` or `pipeline/i18n_extensions.py`.
 - No hardcoded English (or other language) in UI labels, buttons, notifications, dialogs, or placeholders.
+- Also applies to chat messages, generated deck/document text (slide titles, filler, headings) and chart titles/captions.
+- `tests/test_no_hardcoded_ui_strings.py` fails on any English literal passed to a user-facing call (notify/label/set_assistant_content...). Log lines (log/sink.log) are diagnostics and may stay English.
+- Deck titles: recognise standard slides (agenda, closing) via `pipeline/deck_i18n.py`, never by comparing to English words.
 
 ## 8. Query intent classification (i18n)
 - Any check that inspects the user's own typed query/instruction to make a

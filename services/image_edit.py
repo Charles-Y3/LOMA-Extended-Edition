@@ -9,6 +9,7 @@ from services.image_generation import (
     DEFAULT_MODEL_ID,
     GENERATED_IMAGE_DIR,
     ImageGenerationResult,
+    ensure_english_prompt,
     prepare_image_prompt,
     unique_output_path,
 )
@@ -31,7 +32,7 @@ def edit_image_local(
     if not source_path or not os.path.isfile(source_path):
         raise FileNotFoundError(f"Source image not found: {source_path}")
 
-    prompt = prepare_image_prompt(instruction or "edit the image")
+    prompt = ensure_english_prompt(prepare_image_prompt(instruction or "edit the image"))
     if not model_id:
         try:
             from services.model_router import get_default_image_model_from_settings

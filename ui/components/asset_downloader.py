@@ -12,7 +12,7 @@ from nicegui import ui
 
 import config
 from config.model_catalog import MODEL_CATALOG, SUBSYSTEM_CATEGORIES, catalog_entry, hardware_tag
-from pipeline.i18n import t as tr
+from pipeline.i18n import TRANSLATIONS, t as tr
 from services.model_router import image_generation_deps_available
 from services.platform_paths import resource_root
 from services.providers.registry import detect_providers, get_active_provider
@@ -444,7 +444,7 @@ def build_subsystem_rows(container, *, online: bool, on_install: Callable[[str],
     """Render subsystem status rows inside a NiceGUI container."""
     for cat in SUBSYSTEM_CATEGORIES:
         key = cat["key"]
-        label = cat["label"]
+        label = tr(f"subsystem.{key}") if f"subsystem.{key}" in TRANSLATIONS["en"] else cat["label"]
         status = subsystem_asset_status(key)
         entries = MODEL_CATALOG.get(key, [])
         enabled = bool(entries and entries[0].get("enabled", True))
@@ -452,13 +452,17 @@ def build_subsystem_rows(container, *, online: bool, on_install: Callable[[str],
             with ui.row().classes("w-full items-center justify-between py-1 border-b border-gray-200/20"):
                 ui.label(label).classes("text-sm")
                 chip_color = {"Ready": "green", "Missing": "orange", "Planned": "gray"}.get(status, "gray")
-                ui.badge(status, color=chip_color).props("outline")
+                ui.badge(tr(f"subsystem.status_{status.lower()}"), color=chip_color).props("outline")
                 if status == "Missing" and enabled and online:
                     ui.button(
-                        "Install",
+                        tr("installer.btn_install"),
                         on_click=lambda k=key: on_install(k) if on_install else None,
                     ).props("dense flat size=sm color=primary")
                 elif not enabled:
-                    ui.label(entries[0].get("badge", "Planned") if entries else "").classes(
+                    ui.label(
+                        (tr("subsystem.coming_soon") if entries[0].get("badge") == "Coming soon" else tr("subsystem.status_planned"))
+                        if entries
+                        else ""
+                    ).classes(
                         "text-[10px] text-gray-400"
                     )

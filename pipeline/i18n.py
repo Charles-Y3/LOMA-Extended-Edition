@@ -8901,6 +8901,12 @@ def to_simplified(text: str) -> str:
     return _T2S_CONVERTER.convert(text)
 
 
+def plain_text(text: str) -> str:
+    """Strip markdown emphasis/code markers from a translated string shown in a widget that
+    can't render markdown (ui.label, ui.notify, tooltips) — otherwise users see literal ** and `."""
+    return re.sub(r"\*\*|__|`", "", text or "")
+
+
 def maybe_traditional(text: str) -> str:
     """Traditional Chinese by default (matches the SOTA reference app) — gated by
     the "traditional_chinese" setting, which covers Chinese output from any speech

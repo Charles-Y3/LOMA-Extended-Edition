@@ -15,6 +15,7 @@ from services.platform_paths import resource_root
 from services.session import state
 from services.system.profiler import get_system_profile
 from ui.components.asset_downloader import AssetDownloader, get_system_ram_gb
+from pipeline.i18n import t as tr
 from ui.components.chat_model_picker import ChatModelTierPicker
 
 _PROJECT_ROOT = Path(resource_root())
@@ -33,13 +34,10 @@ class OnDemandInstaller(AssetDownloader):
 
     def show_vision_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Vision capabilities missing").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "LOMA needs a **vision model** to read slide layouts, pictures, or documents. "
-                f"Your system has **{self.system_ram} GB** of RAM."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.vision_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.vision_body", ram=self.system_ram)).classes("text-sm text-gray-600 my-2")
 
-            ui.label("Select a local model to download:").classes("text-xs font-bold text-gray-500 mt-4")
+            ui.label(tr("installer.vision_select")).classes("text-xs font-bold text-gray-500 mt-4")
 
             profile = get_system_profile()
             options: dict[str, str] = {}
@@ -58,19 +56,21 @@ class OnDemandInstaller(AssetDownloader):
             def update_description(val: str) -> None:
                 entry = catalog_entry("vision", val)
                 if entry:
-                    desc_box.set_content(f"**Details:** {entry['desc']}")
+                    from services.catalog_i18n import localized_desc
+
+                    desc_box.set_content(tr("installer.vision_details", desc=localized_desc(entry)))
 
             select_element.on_value_change(lambda e: update_description(e.value))
             update_description(default_selection)
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-6")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to download").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_download")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Download & install", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.btn_download_install"), color="primary")
                 confirm_btn.on_click(
                     lambda: self.pull_model_async(
                         select_element.value,
@@ -188,13 +188,10 @@ class OnDemandInstaller(AssetDownloader):
 
     def show_image_gen_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Image generation dependencies missing").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "LOMA uses **Diffusers** and **PyTorch** for local image generation. "
-                f"Your system has **{self.system_ram} GB** of RAM."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.imagegen_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.imagegen_body", ram=self.system_ram)).classes("text-sm text-gray-600 my-2")
 
-            ui.label("Default checkpoint (Settings → Image generation):").classes(
+            ui.label(tr("installer.imagegen_checkpoint")).classes(
                 "text-xs font-bold text-gray-500 mt-4"
             )
             try:
@@ -202,61 +199,52 @@ class OnDemandInstaller(AssetDownloader):
             except Exception:
                 model_id = MODEL_CATALOG["image_generation"][0]["name"]
             entry = catalog_entry("image_generation", model_id) or MODEL_CATALOG["image_generation"][0]
-            ui.markdown(f"**{entry['label']}** — downloaded on first generation (`{model_id}`).").classes(
+            ui.markdown(tr("installer.imagegen_checkpoint_line", label=entry["label"], model_id=model_id)).classes(
                 "text-xs mb-2"
             )
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install Python packages").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_packages")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install dependencies", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.btn_install_deps"), color="primary")
                 confirm_btn.on_click(lambda: self.pip_install_async(confirm_btn))
 
             self.dialog.open()
 
     def show_background_removal_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Subject cutout dependency missing").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "LOMA uses **rembg** to cleanly extract a photo's subject — used for "
-                "subject-swap image edits (so the background stays untouched instead of "
-                "being fully regenerated) and for remove/replace-background requests. "
-                f"Your system has **{self.system_ram} GB** of RAM."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.cutout_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.cutout_body", ram=self.system_ram)).classes("text-sm text-gray-600 my-2")
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install Python packages").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_packages")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install dependencies", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.btn_install_deps"), color="primary")
                 confirm_btn.on_click(lambda: self.pip_install_async(confirm_btn))
 
             self.dialog.open()
 
     def show_rag_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Deep document search dependencies missing").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "LOMA uses **ChromaDB**, **LangChain**, and **sentence-transformers** for local "
-                f"semantic document retrieval (Document Intelligence's Deep search mode). Your "
-                f"system has **{self.system_ram} GB** of RAM."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.rag_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.rag_body", ram=self.system_ram)).classes("text-sm text-gray-600 my-2")
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install Python packages").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_packages")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install dependencies", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.btn_install_deps"), color="primary")
                 confirm_btn.on_click(lambda: self._pip_rag_async(confirm_btn))
 
             self.dialog.open()
@@ -267,13 +255,13 @@ class OnDemandInstaller(AssetDownloader):
         def _warm_then_success() -> None:
             try:
                 if self.status_label is not None:
-                    self.status_label.set_text("Downloading embedding model…")
+                    self.status_label.set_text(tr("installer.rag_downloading"))
                 from services.rag_embeddings import get_embedding_backend, reset_embedding_cache
 
                 reset_embedding_cache()
                 get_embedding_backend(force_reload=True)
             except Exception as exc:
-                ui.notify(f"Packages installed; embedding warm-up note: {exc}", type="warning")
+                ui.notify(tr("installer.rag_warmup_note", error=exc), type="warning")
             prev()
 
         self.on_success = _warm_then_success
@@ -284,24 +272,18 @@ class OnDemandInstaller(AssetDownloader):
         but unused. GPU-bound work (image gen, voice cloning, vision) then runs on the GPU."""
         profile = get_system_profile()
         with ui.dialog() as self.dialog, ui.card().classes("w-[520px] p-6"):
-            ui.label("Enable GPU acceleration").classes("text-xl font-bold text-primary")
+            ui.label(tr("installer.gpu_title")).classes("text-xl font-bold text-primary")
             vram = f", {profile.vram_gb:g} GB VRAM" if profile.vram_gb else ""
-            ui.markdown(
-                f"A CUDA GPU (**{profile.gpu_name or 'NVIDIA GPU'}**{vram}) was detected, but the "
-                "installed PyTorch is **CPU-only** — so image generation, voice cloning, and "
-                "vision all run on the CPU (much slower).\n\n"
-                "This reinstalls PyTorch with CUDA support (~2–3 GB download). **Restart LOMA "
-                "afterwards** for the GPU to take effect."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.markdown(tr("installer.gpu_body", gpu=profile.gpu_name or "NVIDIA GPU", vram=vram)).classes("text-sm text-gray-600 my-2")
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_install")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install GPU PyTorch", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.gpu_btn"), color="primary")
                 confirm_btn.on_click(lambda: self._pip_gpu_torch_async(confirm_btn))
 
             self.dialog.open()
@@ -313,7 +295,7 @@ class OnDemandInstaller(AssetDownloader):
             self.progress_bar.set_visibility(True)
         if self.status_label is not None:
             self.status_label.set_visibility(True)
-            self.status_label.set_text("Installing CUDA PyTorch… this can take several minutes.")
+            self.status_label.set_text(tr("installer.gpu_installing"))
         import threading
 
         threading.Thread(target=self._run_gpu_torch_install, daemon=True).start()
@@ -360,16 +342,13 @@ class OnDemandInstaller(AssetDownloader):
         torch_ver = versions.get("torch", "")
         if not torch_ver:
             if self.status_label is not None:
-                self.status_label.set_text("Could not detect the installed PyTorch version.")
+                self.status_label.set_text(tr("installer.gpu_no_version"))
             return
 
         tag = self._resolve_cuda_tag(torch_ver)
         if not tag:
             if self.status_label is not None:
-                self.status_label.set_text(
-                    f"No CUDA wheel found for torch {torch_ver}. Set LOMA_TORCH_CUDA to a tag "
-                    "(e.g. cu126) that has it."
-                )
+                self.status_label.set_text(tr("installer.gpu_no_wheel", version=torch_ver))
             return
 
         index = f"https://download.pytorch.org/whl/{tag}"
@@ -383,9 +362,7 @@ class OnDemandInstaller(AssetDownloader):
             if not ok:
                 raise RuntimeError(output[-300:] or "pip install failed")
             if self.status_label is not None:
-                self.status_label.set_text(
-                    f"GPU PyTorch ({tag}) installed — restart LOMA to activate the GPU."
-                )
+                self.status_label.set_text(tr("installer.gpu_done", tag=tag))
             try:
                 from services.system.profiler import refresh_system_profile
 
@@ -395,7 +372,7 @@ class OnDemandInstaller(AssetDownloader):
             self.on_success()
         except Exception as exc:
             if self.status_label is not None:
-                self.status_label.set_text(f"Install failed: {str(exc)[:200]}")
+                self.status_label.set_text(tr("installer.failed", error=str(exc)[:200]))
         finally:
             if self.progress_bar is not None:
                 self.progress_bar.set_value(1.0)
@@ -525,17 +502,15 @@ class OnDemandInstaller(AssetDownloader):
 
     def show_doc_intel_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Document Intelligence core").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "Installs **rank-bm25** and **msoffcrypto-tool** for Fast search and encrypted Office files."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.docintel_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.docintel_body")).classes("text-sm text-gray-600 my-2")
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_install")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.btn_install"), color="primary")
                 confirm_btn.on_click(
                     lambda: self.pip_install_async(confirm_btn, _REQUIREMENTS_DOC_INTEL)
                 )
@@ -543,58 +518,48 @@ class OnDemandInstaller(AssetDownloader):
 
     def show_rembg_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Background removal (rembg)").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "Installs **rembg** for Artwork Studio Composite cut-outs (~170 MB model on first use)."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.rembg_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.rembg_body")).classes("text-sm text-gray-600 my-2")
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_install")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install rembg", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.rembg_btn"), color="primary")
                 confirm_btn.on_click(lambda: self._pip_rembg_async(confirm_btn))
             self.dialog.open()
 
     def show_ffmpeg_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("ffmpeg required for video audio").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "LOMA needs **ffmpeg** to extract audio from video files and export **MP3**. "
-                "Click install to add a bundled ffmpeg via `imageio-ffmpeg` (no manual PATH setup)."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.ffmpeg_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.ffmpeg_body")).classes("text-sm text-gray-600 my-2")
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_install")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install ffmpeg", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.ffmpeg_btn"), color="primary")
                 confirm_btn.on_click(lambda: self._pip_ffmpeg_async(confirm_btn))
 
             self.dialog.open()
 
     def show_playwright_installer(self) -> None:
         with ui.dialog() as self.dialog, ui.card().classes("w-[500px] p-6"):
-            ui.label("Web page reading (Playwright)").classes("text-xl font-bold text-primary")
-            ui.markdown(
-                "LOMA needs a browser to read live web pages for grounded chat and research. "
-                "The `playwright` package is already installed — this just downloads its "
-                "**Chromium** browser (~150MB, one time). If Chrome or Edge is already "
-                "installed, LOMA uses that instead and this step isn't needed."
-            ).classes("text-sm text-gray-600 my-2")
+            ui.label(tr("installer.pw_title")).classes("text-xl font-bold text-primary")
+            ui.markdown(tr("installer.pw_body")).classes("text-sm text-gray-600 my-2")
 
             self.progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full mt-4")
             self.progress_bar.set_visibility(False)
-            self.status_label = ui.label("Ready to install").classes("text-xs text-gray-500 mt-1")
+            self.status_label = ui.label(tr("installer.ready_install")).classes("text-xs text-gray-500 mt-1")
             self.status_label.set_visibility(False)
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                ui.button("Cancel", on_click=self.dialog.close).props("flat")
-                confirm_btn = ui.button("Install browser", color="primary")
+                ui.button(tr("common.cancel"), on_click=self.dialog.close).props("flat")
+                confirm_btn = ui.button(tr("installer.pw_btn"), color="primary")
                 confirm_btn.on_click(lambda: self._pip_playwright_async(confirm_btn))
 
             self.dialog.open()
@@ -606,7 +571,7 @@ class OnDemandInstaller(AssetDownloader):
             self.progress_bar.set_visibility(True)
         if self.status_label is not None:
             self.status_label.set_visibility(True)
-            self.status_label.set_text("Installing imageio-ffmpeg…")
+            self.status_label.set_text(tr("installer.ffmpeg_installing"))
         import threading
 
         threading.Thread(target=self._run_ffmpeg_install, daemon=True).start()
@@ -632,9 +597,7 @@ class OnDemandInstaller(AssetDownloader):
                     pass
             if self.status_label is not None:
                 self.status_label.set_text(
-                    "ffmpeg ready. You can retry your request."
-                    if path
-                    else "Installed package but ffmpeg binary not found — add ffmpeg to PATH."
+                    tr("installer.ffmpeg_ready") if path else tr("installer.ffmpeg_missing")
                 )
             try:
                 if self.dialog is not None:
@@ -644,7 +607,7 @@ class OnDemandInstaller(AssetDownloader):
             self.on_success()
         except Exception as exc:
             if self.status_label is not None:
-                self.status_label.set_text(f"Install failed: {exc}")
+                self.status_label.set_text(tr("installer.failed", error=exc))
         finally:
             if self.progress_bar is not None:
                 self.progress_bar.set_value(1.0)
@@ -656,7 +619,7 @@ class OnDemandInstaller(AssetDownloader):
             self.progress_bar.set_visibility(True)
         if self.status_label is not None:
             self.status_label.set_visibility(True)
-            self.status_label.set_text("Downloading Chromium…")
+            self.status_label.set_text(tr("installer.pw_downloading"))
         import threading
 
         threading.Thread(target=self._run_playwright_install, daemon=True).start()
@@ -675,9 +638,7 @@ class OnDemandInstaller(AssetDownloader):
             ok = browser_automation_ready(force_refresh=True)
             if self.status_label is not None:
                 self.status_label.set_text(
-                    "Chromium ready. You can retry your request."
-                    if ok
-                    else "Install finished but the browser still isn't detected — check the console log."
+                    tr("installer.pw_ready") if ok else tr("installer.pw_not_detected")
                 )
             try:
                 if self.dialog is not None:
@@ -687,7 +648,7 @@ class OnDemandInstaller(AssetDownloader):
             self.on_success()
         except Exception as exc:
             if self.status_label is not None:
-                self.status_label.set_text(f"Install failed: {exc}")
+                self.status_label.set_text(tr("installer.failed", error=exc))
         finally:
             if self.progress_bar is not None:
                 self.progress_bar.set_value(1.0)
@@ -702,7 +663,7 @@ class OnDemandInstaller(AssetDownloader):
             self.progress_bar.set_visibility(True)
         if self.status_label is not None:
             self.status_label.set_visibility(True)
-            self.status_label.set_text("Installing faster-whisper…")
+            self.status_label.set_text(tr("installer.whisper_installing"))
         import threading
 
         threading.Thread(target=self._run_hybrid_whisper_install, daemon=True).start()
@@ -716,7 +677,7 @@ class OnDemandInstaller(AssetDownloader):
             if not ok:
                 raise RuntimeError(output[-300:] or "pip install failed")
             if self.status_label is not None:
-                schedule_on_ui(lambda: self.status_label.set_text("Caching Whisper transcription model…"))
+                schedule_on_ui(lambda: self.status_label.set_text(tr("installer.whisper_caching")))
             from services.media_transcription import ensure_whisper_model
 
             ok, detail = ensure_whisper_model()
@@ -725,7 +686,7 @@ class OnDemandInstaller(AssetDownloader):
 
             def _done() -> None:
                 if self.status_label is not None:
-                    self.status_label.set_text("Whisper ready.")
+                    self.status_label.set_text(tr("installer.whisper_ready"))
                 try:
                     if self.dialog is not None:
                         self.dialog.close()
@@ -741,7 +702,7 @@ class OnDemandInstaller(AssetDownloader):
             # the real error.
             err_msg = str(exc)
             if self.status_label is not None:
-                schedule_on_ui(lambda: self.status_label.set_text(f"Install failed: {err_msg}"))
+                schedule_on_ui(lambda: self.status_label.set_text(tr("installer.failed", error=err_msg)))
         finally:
             if self.progress_bar is not None:
                 schedule_on_ui(lambda: self.progress_bar.set_value(1.0))
@@ -753,7 +714,7 @@ class OnDemandInstaller(AssetDownloader):
             self.progress_bar.set_visibility(True)
         if self.status_label is not None:
             self.status_label.set_visibility(True)
-            self.status_label.set_text("Installing funasr…")
+            self.status_label.set_text(tr("installer.sensevoice_installing"))
         import threading
 
         threading.Thread(target=self._run_sensevoice_install, daemon=True).start()
@@ -769,7 +730,7 @@ class OnDemandInstaller(AssetDownloader):
             if not ok:
                 raise RuntimeError(output[-300:] or "pip install failed")
             if self.status_label is not None:
-                schedule_on_ui(lambda: self.status_label.set_text("Downloading SenseVoice model (HF → ModelScope)…"))
+                schedule_on_ui(lambda: self.status_label.set_text(tr("installer.sensevoice_downloading")))
             from services.voice_input import ensure_sensevoice_model
 
             ok, detail = ensure_sensevoice_model()
@@ -778,7 +739,7 @@ class OnDemandInstaller(AssetDownloader):
 
             def _done() -> None:
                 if self.status_label is not None:
-                    self.status_label.set_text("SenseVoice ready.")
+                    self.status_label.set_text(tr("installer.sensevoice_ready"))
                 try:
                     if self.dialog is not None:
                         self.dialog.close()
@@ -794,7 +755,7 @@ class OnDemandInstaller(AssetDownloader):
             # the real error.
             err_msg = str(exc)
             if self.status_label is not None:
-                schedule_on_ui(lambda: self.status_label.set_text(f"Install failed: {err_msg}"))
+                schedule_on_ui(lambda: self.status_label.set_text(tr("installer.failed", error=err_msg)))
         finally:
             if self.progress_bar is not None:
                 schedule_on_ui(lambda: self.progress_bar.set_value(1.0))
@@ -806,7 +767,7 @@ class OnDemandInstaller(AssetDownloader):
             self.progress_bar.set_visibility(True)
         if self.status_label is not None:
             self.status_label.set_visibility(True)
-            self.status_label.set_text("Installing rembg…")
+            self.status_label.set_text(tr("installer.rembg_installing"))
         import threading
 
         threading.Thread(target=self._run_rembg_install, daemon=True).start()
@@ -822,7 +783,7 @@ class OnDemandInstaller(AssetDownloader):
 
             def _done() -> None:
                 if self.status_label is not None:
-                    self.status_label.set_text("rembg ready.")
+                    self.status_label.set_text(tr("installer.rembg_ready"))
                 try:
                     if self.dialog is not None:
                         self.dialog.close()
@@ -838,7 +799,7 @@ class OnDemandInstaller(AssetDownloader):
             # the real error.
             err_msg = str(exc)
             if self.status_label is not None:
-                schedule_on_ui(lambda: self.status_label.set_text(f"Install failed: {err_msg}"))
+                schedule_on_ui(lambda: self.status_label.set_text(tr("installer.failed", error=err_msg)))
         finally:
             if self.progress_bar is not None:
                 schedule_on_ui(lambda: self.progress_bar.set_value(1.0))

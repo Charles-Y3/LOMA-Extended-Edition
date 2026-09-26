@@ -5,6 +5,7 @@ import os
 import json
 from nicegui import ui
 import config
+from pipeline.i18n import t as _tr  # noqa: E402
 
 SETTINGS_FILE = config.SETTINGS_FILE
 
@@ -197,7 +198,7 @@ def clear_context():
     context_media_blocks_cache.clear()
     context_source_digests_cache = None
     add_log("Context memory cleared.")
-    ui.notify("File context cleared.", color='info')
+    ui.notify(_tr("notify.file_context_cleared"), color='info')
 
 
 def log_session_source(kind: str, name: str) -> None:
@@ -218,7 +219,7 @@ def add_web_link(link):
     active_web_links.append(link)
     log_session_source("link", link)
     add_log(f"Web context added: {link}")
-    ui.notify(f"Web link added to LOMA context.", color='positive')
+    ui.notify(_tr("notify.web_link_added"), color='positive')
 
 
 def update_role_in_memory(role, new_model_args):

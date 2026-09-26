@@ -374,6 +374,6 @@ if sys.platform == 'darwin':
             ),
             'CFBundleDisplayName': _APP_NAME,
             'CFBundleName': _APP_NAME,
-            'CFBundleShortVersionString': '1.0.1',
+            'CFBundleShortVersionString': '1.0.2',
         },
     )

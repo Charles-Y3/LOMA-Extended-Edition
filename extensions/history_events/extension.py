@@ -17,7 +17,7 @@ from extensions.history_events.engine import (
 )
 from extensions.ludicity_shared.panel import FOOTER_CLS, INTRO_CLS, PANEL_CLS
 from pipeline.base.base_extension import BaseExtension
-from pipeline.i18n import t as tr
+from pipeline.i18n import plain_text, t as tr
 from services.session.chat_post import post_assistant_message
 
 _refresh_meta = None
@@ -90,7 +90,7 @@ def build_history_events_panel() -> None:
             try:
                 start_encounter(state, era_bucket=era)
             except Exception as ex:
-                post_assistant_message(f"Could not load encounter: {ex}")
+                post_assistant_message(tr("chat.history_load_failed", error=ex))
             finally:
                 state.busy = False
                 _ui_refresh()
@@ -121,7 +121,7 @@ def build_history_events_panel() -> None:
             try:
                 submit_answer(state, answer=answer)
             except Exception as ex:
-                post_assistant_message(f"Could not grade answer: {ex}")
+                post_assistant_message(tr("chat.history_grade_failed", error=ex))
             finally:
                 state.busy = False
                 _ui_refresh()
@@ -136,7 +136,7 @@ def build_history_events_panel() -> None:
         get_state().era_filter = str(val).strip() or ERA_ANY
 
     with ui.column().classes(PANEL_CLS):
-        ui.label(tr("history_events.intro")).classes(INTRO_CLS)
+        ui.markdown(tr("history_events.intro")).classes(INTRO_CLS)
 
         initial_era = get_state().era_filter or ERA_ANY
         _era_select = ui.select(
@@ -181,8 +181,11 @@ def build_history_events_panel() -> None:
 
                 with ui.column().classes("w-full shrink-0 gap-1 px-0.5"):
                     if enc:
-                        ui.label(enc.title).classes("text-xs font-bold text-sky-200 shrink-0")
-                        ui.label(f"{enc.era} · {enc.category}").classes(
+                        from extensions.ludicity_shared.content_locale import cached_history_encounter
+
+                        loc = cached_history_encounter(enc)
+                        ui.label(loc["title"]).classes("text-xs font-bold text-sky-200 shrink-0")
+                        ui.label(f"{loc['era']} · {loc['category']}").classes(
                             "text-[10px] text-gray-400 shrink-0"
                         )
                     else:
@@ -201,7 +204,7 @@ def build_history_events_panel() -> None:
                             "text-[10px] text-gray-500 shrink-0 mt-2"
                         )
                     elif not enc:
-                        ui.label(tr("history_events.click_new")).classes(
+                        ui.label(plain_text(tr("history_events.click_new"))).classes(
                             "text-xs text-gray-500 italic shrink-0 mt-2"
                         )
 

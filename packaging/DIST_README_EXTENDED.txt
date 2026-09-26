@@ -1,6 +1,6 @@
 LOMA Extended Edition
 Platform: Windows 10/11 (64-bit) and macOS (Apple Silicon)
-Version: 1.0.1
+Version: 1.0.2
 
 ============================================================
 OVERVIEW

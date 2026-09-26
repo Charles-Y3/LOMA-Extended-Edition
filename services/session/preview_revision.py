@@ -6,6 +6,7 @@ import os
 import threading
 
 from pipeline.query_intent_i18n import matches
+from pipeline.i18n import t as _tr  # noqa: E402
 
 # An imperative to change the highlighted text → revise (mutation). Anything else
 # (a question / request for more info) → ask (chat). Default is ask.
@@ -138,9 +139,9 @@ def start_preview_revision(instruction: str) -> None:
 
 def _format_preview_ask_user_message(selection: str, question: str) -> str:
     excerpt_display = selection if len(selection) <= 400 else selection[:397] + "..."
-    display_q = question if question else "What does this mean?"
+    display_q = question if question else _tr("preview.ask_default_question")
     return (
-        f"**Ask LOMA** (preview selection):\n\n"
+        f"{_tr('preview.ask_header')}\n\n"
         f"> {excerpt_display}\n\n"
         f"{display_q}"
     )
@@ -165,7 +166,7 @@ def run_preview_ask(question: str, selection: str) -> None:
     if not selection:
         sink.log("Ask LOMA aborted — highlight text in Preview first.")
         schedule_on_ui(
-            lambda: _finish_preview_ask_ui("Highlight text in Preview first, then ask LOMA about it.")
+            lambda: _finish_preview_ask_ui(_tr("preview.ask_highlight_first"))
         )
         return
 
@@ -191,7 +192,7 @@ def run_preview_ask(question: str, selection: str) -> None:
         schedule_on_ui(lambda: _finish_preview_ask_ui(answer))
     except Exception as ex:
         sink.log(f"Ask LOMA failed: {ex}")
-        schedule_on_ui(lambda: _finish_preview_ask_ui(f"Could not answer about the selection: {ex}"))
+        schedule_on_ui(lambda: _finish_preview_ask_ui(_tr("preview.ask_failed", error=ex)))
 
 
 def submit_preview_ask(question: str) -> None:
@@ -202,12 +203,12 @@ def submit_preview_ask(question: str) -> None:
     if not selection:
         from nicegui import ui
 
-        ui.notify("Highlight text in Preview first.", color="warning")
+        ui.notify(_tr("notify.highlight_first"), color="warning")
         return
     if state.workflow_active:
         from nicegui import ui
 
-        ui.notify("Wait until the current run finishes.", color="warning")
+        ui.notify(_tr("notify.wait_run"), color="warning")
         return
 
     question = (question or "").strip()

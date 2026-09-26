@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from nicegui import ui
 
+from pipeline.i18n import t as tr
+
 from services.session import state
 from ui.themes import tokens
 
@@ -35,7 +37,7 @@ def render_file_card(file_item: dict, on_remove) -> None:
             if file_item in state.active_context_files:
                 state.active_context_files.remove(file_item)
                 on_remove()
-                ui.notify("Document context removed.", color="warning")
+                ui.notify(tr("ui.doc_context_removed"), color="warning")
 
         ui.button(icon="close", on_click=remove).props("flat round dense size=xs").classes(
             f"{t['muted']} opacity-70 group-hover:opacity-100 hover:text-red-400 shrink-0"
@@ -56,7 +58,7 @@ def render_link_card(link_item: str, on_remove) -> None:
 
                 drop_cached(link_item)
                 on_remove()
-                ui.notify("Link reference removed.", color="warning")
+                ui.notify(tr("ui.link_ref_removed"), color="warning")
 
         ui.button(icon="close", on_click=remove).props("flat round dense size=xs").classes(
             f"{t['muted']} opacity-70 group-hover:opacity-100 hover:text-red-400 shrink-0"

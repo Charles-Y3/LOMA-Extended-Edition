@@ -9,6 +9,7 @@ from typing import Optional
 # Cross-module import bindings for the specialized document surgery tool
 from pipeline.output_format import EXTENSION_BY_TYPE
 from services.office_mutation import mutate_office_file
+from pipeline.i18n import t as _tr  # noqa: E402
 
 try:
     from docx import Document
@@ -443,10 +444,7 @@ def _render_docx_markdown_lines(
                 # Skip the doomed generation attempt entirely (same reasoning as
                 # presentation_compile.py's equivalent check) and say why, instead of
                 # the generic "[Image prompt: ...]" fallback used for other failures.
-                doc.add_paragraph(
-                    f"[Image prompt: {image_prompt}] "
-                    "(No image-generation model downloaded — get one from Settings → Model Library.)"
-                )
+                doc.add_paragraph(_tr("doc.image_prompt_no_model", prompt=image_prompt))
                 continue
             image_path = _generate_image_for_marker(
                 image_prompt, stem, image_counter[0], prof=prof, model=model,
@@ -456,7 +454,7 @@ def _render_docx_markdown_lines(
                 shape = doc.add_picture(image_path, width=DocxInches(5.8))
                 _set_docx_picture_alt_text(shape, image_prompt)
             else:
-                doc.add_paragraph(f"[Image prompt: {image_prompt}]")
+                doc.add_paragraph(_tr("doc.image_prompt", prompt=image_prompt))
             continue
         stripped = _strip_image_markers(stripped)
         if not stripped:
@@ -537,7 +535,7 @@ def _add_toc_field(paragraph) -> None:
     fld_sep = OxmlElement('w:fldChar')
     fld_sep.set(qn('w:fldCharType'), 'separate')
     placeholder = OxmlElement('w:t')
-    placeholder.text = 'Right-click and choose "Update Field" to generate the table of contents.'
+    placeholder.text = _tr("doc.toc_placeholder")
     fld_end = OxmlElement('w:fldChar')
     fld_end.set(qn('w:fldCharType'), 'end')
     r = run._r
@@ -546,6 +544,20 @@ def _add_toc_field(paragraph) -> None:
     r.append(fld_sep)
     r.append(placeholder)
     r.append(fld_end)
+
+
+def _pretranslate_marker_prompts(markdown_text: str) -> None:
+    """One up-front LLM call translating every image marker in the document, so the per-image
+    generation loop never calls the LLM (which would evict the loaded image pipeline each
+    time — see services.image_generation.pretranslate_prompts). No-op for English text."""
+    try:
+        from services.image_generation import pretranslate_prompts
+
+        prompts = [p for p in map(_extract_image_prompt, (ln.strip() for ln in markdown_text.splitlines())) if p]
+        if prompts:
+            pretranslate_prompts(prompts)
+    except Exception:
+        pass
 
 
 def build_docx_from_markdown(
@@ -573,6 +585,11 @@ def build_docx_from_markdown(
         with open(txt_path, "w", encoding="utf-8") as f:
             f.write(markdown_text)
         return txt_path
+
+    from services.model_router import any_image_model_installed as _img_ok
+
+    if _img_ok():
+        _pretranslate_marker_prompts(markdown_text)
 
     doc = Document()
     try:
@@ -618,7 +635,7 @@ def build_docx_from_markdown(
         )
 
     if want_toc:
-        doc.add_heading("Contents", level=1)
+        doc.add_heading(_tr("doc.contents"), level=1)
         _add_toc_field(doc.add_paragraph())
         doc.add_page_break()
 
@@ -667,6 +684,8 @@ def build_pptx_from_markdown(
     # note through (unlike compile_agentic_presentation's main path) — just skip the
     # doomed per-slide generation attempts rather than silently failing on each one.
     skip_images = not any_image_model_installed()
+    if not skip_images:
+        _pretranslate_marker_prompts(markdown_text)
 
     for slide_idx, slide_data in enumerate(slides_content):
         lines = [line.strip() for line in slide_data.split('\n') if line.strip()]
@@ -714,6 +733,9 @@ def build_pptx_from_markdown(
                 bullet_points.append(sanitize_bullet_text(line))
 
         bullet_points, extra_image, extra_notes = partition_slide_extras(bullet_points)
+        from pipeline.deck_i18n import localize_standard_title
+
+        title_text = localize_standard_title(title_text)
         if extra_image:
             image_prompts.append(extra_image)
         if extra_notes:
@@ -738,7 +760,7 @@ def build_pptx_from_markdown(
             if title_text:
                 set_pptx_paragraph_inline(title_shape.text_frame.paragraphs[0], title_text)
             else:
-                title_shape.text = "Slide Section"
+                title_shape.text = _tr("deck.slide_section")
 
         if use_title_layout and subtitle_text and len(slide.placeholders) > 1 and slide.placeholders[1]:
             set_pptx_paragraph_inline(slide.placeholders[1].text_frame.paragraphs[0], subtitle_text)

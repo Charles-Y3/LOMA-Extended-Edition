@@ -8,6 +8,7 @@ import config
 from pipeline.i18n import normalize_locale
 from services.persistence import migrate, register, stamp
 from services.session import state
+from pipeline.i18n import t as _tr  # noqa: E402
 
 # Persistence spine (docs/PIPELINE_REFACTOR.md §0.5 #1). v1 folds in the Document
 # Intelligence → Knowledge Vault rename: an existing Extended settings.json lists the
@@ -50,10 +51,10 @@ def save_settings(data: dict, *, quiet: bool = False) -> None:
             os.fsync(f.fileno())
         config.sync_roles(data.get("assignments", {}))
         if not quiet:
-            ui.notify("Settings synced & System updated", color="positive", pos="bottom-right", icon="save")
+            ui.notify(_tr("notify.settings_saved"), color="positive", pos="bottom-right", icon="save")
     except Exception as e:
         if not quiet:
-            ui.notify(f"Save failed: {e}", color="negative")
+            ui.notify(_tr("notify.save_failed", error=e), color="negative")
 
 
 _DEFAULT_ENABLED_EXTENSIONS = frozenset({

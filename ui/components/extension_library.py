@@ -7,7 +7,7 @@ from pathlib import Path
 
 from nicegui import ui
 
-from pipeline.i18n import t as tr
+from pipeline.i18n import plain_text, t as tr
 from ui.themes import tokens
 from pipeline.extension_i18n import extension_description, extension_title
 from pipeline.registry.extension_registry import extension_registry
@@ -303,8 +303,8 @@ def _enable_with_requirements_check(ext_id: str, row: dict, title: str, refresh_
                     _install_next(rest)
                 else:
                     status.set_visibility(True)
-                    status.set_text(tr("library.requires_install_failed", key=key))
-                    ui.notify(tr("library.requires_install_failed", key=key), type="negative")
+                    status.set_text(plain_text(tr("library.requires_install_failed", key=key)))
+                    ui.notify(plain_text(tr("library.requires_install_failed", key=key)), type="negative")
 
             offer_requirement_installer(key, on_success=_after)
 

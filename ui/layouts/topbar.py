@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from nicegui import ui
 
-from pipeline.i18n import language_select_options, t, theme_select_options, tts_rate_select_options, upload_retention_select_options, is_cjk_locale
+from pipeline.i18n import plain_text, language_select_options, t, theme_select_options, tts_rate_select_options, upload_retention_select_options, is_cjk_locale
 from services.session import handlers, state
 from config import get_installed_models
 from services.model_router import (
@@ -362,7 +362,7 @@ def build_settings_dialog(on_save_reload, theme_tokens: dict) -> ui.dialog:
                                     "default_whisper_model", e.value
                                 ),
                             ).props(theme_tokens["select_props"]).classes("w-full mb-2").tooltip(
-                                t("settings.whisper_model_size_tooltip")
+                                plain_text(t("settings.whisper_model_size_tooltip"))
                             )
                         else:
                             ui.label(t("settings.whisper_none_installed")).classes(

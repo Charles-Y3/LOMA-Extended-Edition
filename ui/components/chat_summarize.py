@@ -35,7 +35,7 @@ def build_summarize_dialog() -> None:
                 return
             opener = getattr(state, "open_chat_freeze_dialog", None)
             if not opener:
-                ui.notify("Chat archive is not ready.", color="warning")
+                ui.notify(tr("ui.archive_not_ready"), color="warning")
                 return
             state._summarize_freeze_prefill = text
             await opener()

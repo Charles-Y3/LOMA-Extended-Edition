@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from services.platform_paths import is_frozen, writable_root
+from pipeline.i18n import t as _tr  # noqa: E402
 
 # Saved chats live in the per-user data folder (dev runs: <repo>/data/chats, the same place
 # as before). A packaged app's own folder can be read-only (macOS App Translocation) or
@@ -268,7 +269,7 @@ def register_freeze(filename: str, title: str, created_at: str | None = None) ->
     now = created_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     index = load_index()
     index[filename] = {
-        "title": title.strip() or "Untitled chat",
+        "title": title.strip() or _tr("chat.untitled"),
         "created_at": now,
         "updated_at": now,
     }
@@ -278,7 +279,7 @@ def register_freeze(filename: str, title: str, created_at: str | None = None) ->
 def update_title(filename: str, new_title: str) -> None:
     index = load_index()
     entry = index.get(filename, get_entry(filename))
-    entry["title"] = (new_title or "Untitled chat").strip()
+    entry["title"] = (new_title or _tr("chat.untitled")).strip()
     entry["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     index[filename] = entry
     save_index(index)

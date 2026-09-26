@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Post assistant messages into the workspace chat panel."""
 from __future__ import annotations
+from pipeline.i18n import t as _tr  # noqa: E402
 
 
 def _refresh_chat() -> None:
@@ -32,7 +33,7 @@ def post_assistant_message(content: str, *, anchor: str | None = None, scroll_to
 
 
 def post_processing_message(content: str) -> None:
-    text = (content or "").strip() or "LOMA is processing…"
+    text = (content or "").strip() or _tr("chat.processing_default")
 
     def _apply() -> None:
         from services.session import state

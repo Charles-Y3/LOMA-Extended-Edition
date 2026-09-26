@@ -32,21 +32,26 @@ from __future__ import annotations
 
 import re
 
+# Anchors must NOT contain the generic word for "picture/image" in any language ("pornographic
+# image", "色情圖片", "imagen pornográfica", "pornografisches Bild" used to): every sentence about
+# making/editing a picture ("畫一張圖片", "add an image", "imagen") then scored above the threshold
+# and was blocked — 12/42 benign requests, and Chinese decks lost all their images. With the noun
+# removed: 0/42 benign false positives and 0/23 explicit misses (tests/test_image_safety_anchors.py).
 _EXPLICIT_ANCHORS = (
     "explicit sexual intercourse",
-    "pornographic image",
+    "pornography",
     "genitalia exposed in a sexual act",
     "explicit fetish or bondage content",
     "露骨的性行為",
-    "色情圖片",
+    "色情內容",
     "露骨的性内容",
-    "色情图片",
+    "色情内容",
     "relaciones sexuales explícitas",
-    "imagen pornográfica",
+    "pornografía",
     "genitales expuestos en un acto sexual",
     "contenido fetichista o de bondage explícito",
     "explizite sexuelle Handlungen",
-    "pornografisches Bild",
+    "Pornografie",
     "Genitalien in einer sexuellen Handlung sichtbar",
     "explizite Fetisch- oder Bondage-Inhalte",
 )
@@ -171,7 +176,7 @@ def _sentence_is_explicit(sentence: str, explicit_vectors: list) -> bool:
     return max(_cosine(query_vec, v) for v in explicit_vectors) >= _MIN_EXPLICIT_SCORE
 
 
-def is_explicit_prompt(text: str) -> bool:
+def is_explicit_prompt(text: str, *, use_embeddings: bool = True) -> bool:
     """True when any single sentence in `text` scores above _MIN_EXPLICIT_SCORE
     against the explicit anchors — see _split_sentences for why this is scored
     per-sentence rather than on the whole text at once. Returns False (lets the
@@ -187,6 +192,11 @@ def is_explicit_prompt(text: str) -> bool:
 
     if matches(stripped, "explicit_nudity_request"):
         return True
+    if not use_embeddings:
+        # Deterministic layers only. Used for the user's own short request: the embedding layer
+        # scores instructions like "畫一張圖片" ("draw a picture") above the threshold purely
+        # because the Chinese anchor "色情圖片" also contains "圖片" (6/22 benign requests).
+        return False
     if not _deps_available():
         return False
     try:

@@ -201,8 +201,12 @@ def _strip_trailing_script_after_markers(text: str) -> str:
 
 
 def _is_agenda_title(title: str) -> bool:
-    """True for 'Agenda', 'Outline', or 'Agenda: …' / 'Outline — …'."""
-    return bool(re.match(r"^(agenda|outline)\b", (title or "").strip(), re.I))
+    """True for 'Agenda', 'Outline', or 'Agenda: …' / 'Outline — …' — and their equivalents in every
+    supported language ('議程', 'Gliederung', ...), so a correct non-English agenda is never
+    mistaken for a missing one (which used to insert a second, English 'Agenda' slide)."""
+    from pipeline.deck_i18n import is_agenda_title
+
+    return is_agenda_title(title)
 
 
 _GENERIC_FILLER_BULLETS = {
@@ -241,7 +245,9 @@ def _is_junk_slide_block(block: str, *, all_titles: list[str]) -> bool:
     tl = (title or "").strip().lower()
     if not tl:
         return True
-    if re.fullmatch(r"section\s+\d+", tl):
+    from pipeline.deck_i18n import is_bare_agenda_title, is_filler_section_title
+
+    if re.fullmatch(r"section\s+\d+", tl) or is_filler_section_title(title):
         return True
     if re.fullmatch(r"key\s*topic\s+\d+", tl):
         return True
@@ -258,9 +264,8 @@ def _is_junk_slide_block(block: str, *, all_titles: list[str]) -> bool:
     # agenda slide the structured deck pipeline produces (confirmed via a
     # real run: "10 slides" requested and confirmed in chat, compiled to 9
     # because the agenda slide got scrubbed as "junk").
-    if tl in ("agenda", "outline") and any(
-        _is_agenda_title(t) and t.strip().lower() not in ("agenda", "outline")
-        for t in all_titles
+    if is_bare_agenda_title(title) and any(
+        _is_agenda_title(t) and not is_bare_agenda_title(t) for t in all_titles
     ):
         return True
     return False
@@ -502,31 +507,34 @@ def _outline_bullets_from_slides(slides: list[str]) -> list[str]:
         tl = (title or "").strip().lower()
         if not title or _is_agenda_title(title):
             continue
-        if tl in ("summary", "conclusion") or "next steps" in tl or "takeaway" in tl:
+        from pipeline.deck_i18n import is_closing_title, is_filler_section_title
+
+        if is_closing_title(title):
             continue
-        if re.fullmatch(r"section\s+\d+", tl) or re.fullmatch(r"key\s*topic\s+\d+", tl):
+        if re.fullmatch(r"section\s+\d+", tl) or re.fullmatch(r"key\s*topic\s+\d+", tl) or is_filler_section_title(title):
             continue
         bullets.append(title)
         if len(bullets) >= 6:
             break
-    return bullets or ["Key themes from the source material"]
+    from pipeline.i18n import t as tr
+
+    return bullets or [tr("deck.themes_fallback")]
 
 
 def _synthetic_bullets(title: str, *, query: str = "") -> list[str]:
     """Fallback bullets when the author only produced a heading."""
+    from pipeline.i18n import t as tr
+    from pipeline.query_intent_i18n import matches
+
     combined = f"{query} {title}".lower()
-    if "kindness" in combined:
-        return [
-            "Small acts of kindness release oxytocin and strengthen social bonds",
-            "One considerate gesture can improve a stranger's entire day",
-            "Daily kindness habits compound into lasting community trust",
-        ]
-    t = (title or "this topic").strip()
-    short = t[:60]
+    if matches(combined, "topic_kindness"):
+        return [tr("deck.kindness_1"), tr("deck.kindness_2"), tr("deck.kindness_3")]
+    t = (title or tr("deck.this_section")).strip()
+    short = t[:60].lower()
     return [
-        f"Clarify why {short.lower()} matters to your audience",
-        f"Give one concrete example that illustrates {short.lower()}",
-        f"End with a specific action listeners can take this week",
+        tr("deck.filler_why", topic=short),
+        tr("deck.filler_example", topic=short),
+        tr("deck.filler_action"),
     ]
 
 
@@ -542,7 +550,9 @@ def pad_title_only_slides(text: str, *, query: str = "") -> str:
             ln.startswith(("- ", "* ")) or _NUMBERED_BULLET.match(ln) for ln in lines
         )
         title = _slide_title_from_block(block)
-        is_outline = _is_agenda_title(title) or title.lower() in ("summary", "conclusion")
+        from pipeline.deck_i18n import is_bare_closing_title
+
+        is_outline = _is_agenda_title(title) or is_bare_closing_title(title)
         is_title_slide = idx == 0 and _block_is_title_only(block)
         if not is_title_slide and not is_outline and not has_bullet and title:
             block = block.rstrip() + "\n" + "\n".join(
@@ -566,9 +576,14 @@ def ensure_deck_structure(text: str, *, deck_title: str = "") -> str:
         )
 
     if not slides:
-        title = (deck_title or "Presentation").strip() or "Presentation"
+        from pipeline.i18n import t as tr
+
+        title = (deck_title or tr("deck.default_title")).strip() or tr("deck.default_title")
         return _slides_to_canonical_markdown(
-            [f"# {title}", "## Agenda\n- Key topics\n- Main insights\n- Conclusion"]
+            [
+                f"# {title}",
+                f"## {tr('deck.agenda')}\n- {tr('deck.key_topics')}\n- {tr('deck.main_insights')}\n- {tr('deck.conclusion')}",
+            ]
         )
 
     first_title = _slide_title_from_block(slides[0])
@@ -604,7 +619,9 @@ def ensure_deck_structure(text: str, *, deck_title: str = "") -> str:
     second_title = _slide_title_from_block(body_slides[0]) if body_slides else ""
     if not body_slides or not _is_agenda_title(second_title):
         outline_items = _outline_bullets_from_slides(rebuilt + body_slides)
-        rebuilt.append("## Agenda\n" + "\n".join(f"- {b}" for b in outline_items))
+        from pipeline.i18n import t as tr
+
+        rebuilt.append(f"## {tr('deck.agenda')}\n" + "\n".join(f"- {b}" for b in outline_items))
         rebuilt.extend(s.strip() for s in body_slides if s.strip())
     else:
         rebuilt.extend(s.strip() for s in body_slides if s.strip())
@@ -622,7 +639,9 @@ def pad_title_only_slides_blocks(slides: list[str], *, query: str = "") -> list[
             ln.startswith(("- ", "* ")) or _NUMBERED_BULLET.match(ln) for ln in lines
         )
         title = _slide_title_from_block(block)
-        is_outline = _is_agenda_title(title) or title.lower() in ("summary", "conclusion")
+        from pipeline.deck_i18n import is_bare_closing_title
+
+        is_outline = _is_agenda_title(title) or is_bare_closing_title(title)
         is_title_slide = idx == 0 and _block_is_title_only(block)
         if not is_title_slide and not is_outline and not has_bullet and title:
             block = block.rstrip() + "\n" + "\n".join(

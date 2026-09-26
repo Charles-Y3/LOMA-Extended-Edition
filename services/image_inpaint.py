@@ -10,6 +10,7 @@ from services.image_generation import (
     DEFAULT_MODEL_ID,
     GENERATED_IMAGE_DIR,
     ImageGenerationResult,
+    ensure_english_prompt,
     build_safety_negative_prompt,
     prepare_image_prompt,
     unique_output_path,
@@ -458,7 +459,7 @@ def swap_subject_local(
     # prompt cost nothing extra (no LLM call) and noticeably reduce that look; this
     # benefits the isolated-crop regeneration specifically since its output has to
     # visually match a real photographic background once recomposited.
-    prompt = prepare_image_prompt(instruction or "edit the subject")
+    prompt = ensure_english_prompt(prepare_image_prompt(instruction or "edit the subject"))
     prompt = f"{prompt}, photorealistic, natural lighting, detailed, high quality photo"
     negative_prompt = build_safety_negative_prompt(
         "cartoon, illustration, drawing, sticker, outline, cel shading, "
@@ -567,7 +568,7 @@ def swap_background_local(
     nw, nh = max(64, int(w * scale) // 8 * 8), max(64, int(h * scale) // 8 * 8)
     frame_resized = original.resize((nw, nh), Image.Resampling.LANCZOS)
 
-    prompt = prepare_image_prompt(instruction or "change the background")
+    prompt = ensure_english_prompt(prepare_image_prompt(instruction or "change the background"))
     prompt = f"{prompt}, full scene, photorealistic, natural lighting, detailed, high quality photo"
     negative_prompt = build_safety_negative_prompt(
         "cartoon, illustration, drawing, sticker, outline, cel shading, "
@@ -684,7 +685,7 @@ def inpaint_image_local(
     from diffusers import StableDiffusionInpaintPipeline, StableDiffusionXLInpaintPipeline
     from PIL import Image
 
-    prompt = prepare_image_prompt(instruction or "edit the masked region")
+    prompt = ensure_english_prompt(prepare_image_prompt(instruction or "edit the masked region"))
     if re.search(r"\brainbow\b", (instruction or "").lower()):
         prompt = f"vivid rainbow multicolor gradient, {prompt}"
     if not model_id:

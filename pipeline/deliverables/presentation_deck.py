@@ -17,6 +17,7 @@ from pipeline.deliverables.presentation_limits import (
     MIN_SLIDES,
     MAX_SLIDES,
 )
+from pipeline.i18n import t as tr
 from pipeline.validate.result import ValidationResult
 
 
@@ -262,6 +263,10 @@ def _is_placeholder_title(title: str) -> bool:
     t = (title or "").strip()
     if not t:
         return True
+    from pipeline.deck_i18n import is_bare_agenda_title, is_filler_section_title
+
+    if is_bare_agenda_title(t) or is_filler_section_title(t):
+        return True
     if _PLACEHOLDER_TITLE.match(t):
         return True
     if re.match(r"^slide\s+\d+\s*[:\-\.]", t, re.I):
@@ -310,11 +315,11 @@ def _is_placeholder_visual(text: str) -> bool:
 def _fallback_notes(title: str, bullets: list[str]) -> str:
     """Deterministic speaker note when the planner LLM dropped the `notes` field —
     guarantees every non-title slide has talking points instead of a silent blank."""
-    t = (title or "this section").strip()
+    t = (title or tr("deck.this_section")).strip()
     if bullets:
         highlight = "; ".join(b.rstrip(".") for b in bullets[:2])
-        return f"Walk through {t}, emphasizing: {highlight}."
-    return f"Introduce {t} and explain why it matters to the audience."
+        return tr("deck.notes_walk", title=t, highlight=highlight)
+    return tr("deck.notes_intro", title=t)
 
 
 def repair_deck_spec(
@@ -345,9 +350,9 @@ def repair_deck_spec(
             if slide.index == 1:
                 title = deck_title
             elif slide.index == 2:
-                title = "Agenda"
+                title = tr("deck.agenda")
             else:
-                title = f"Key topic {slide.index - 2}"
+                title = tr("deck.key_topic", n=slide.index - 2)
         bullets = [
             b for b in (slide.bullets or []) if str(b).strip() and not _is_placeholder_bullet(b)
         ]
@@ -383,7 +388,7 @@ def repair_deck_spec(
             )
 
     if len(slides) < 2:
-        slides.append(SlideSpec(index=2, layout="content", title="Agenda", bullets=[]))
+        slides.append(SlideSpec(index=2, layout="content", title=tr("deck.agenda"), bullets=[]))
 
     agenda = slides[1]
     agenda_bullets = list(agenda.bullets)
@@ -392,11 +397,11 @@ def repair_deck_spec(
             if sl.title and not _is_placeholder_title(sl.title):
                 agenda_bullets.append(sl.title)
     while len(agenda_bullets) < 3:
-        agenda_bullets.append(f"Section {len(agenda_bullets) + 1}")
+        agenda_bullets.append(tr("deck.section", n=len(agenda_bullets) + 1))
     slides[1] = SlideSpec(
         index=2,
         layout="content",
-        title=agenda.title if not _is_placeholder_title(agenda.title) else "Agenda",
+        title=agenda.title if not _is_placeholder_title(agenda.title) else tr("deck.agenda"),
         subtitle=agenda.subtitle,
         bullets=agenda_bullets[:MAX_BULLETS_PER_SLIDE],
         notes=agenda.notes,
@@ -410,8 +415,10 @@ def repair_deck_spec(
         if not _is_junk_slide_spec(s)
     ]
 
+    from pipeline.deck_i18n import is_closing_title
+
     has_closing = any(
-        re.search(r"summary|next\s*steps|takeaway|conclusion", (s.title or ""), re.I)
+        re.search(r"summary|next\s*steps|takeaway|conclusion", (s.title or ""), re.I) or is_closing_title(s.title or "")
         for s in slides[2:]
     )
     if not has_closing:
@@ -419,11 +426,8 @@ def repair_deck_spec(
             SlideSpec(
                 index=len(slides) + 1,
                 layout="closing",
-                title="Summary & Next Steps",
-                bullets=[
-                    "Revisit the key themes from this presentation.",
-                    "Choose one habit to practice with the children in your care.",
-                ],
+                title=tr("deck.summary_next_steps"),
+                bullets=[tr("deck.revisit_themes"), tr("deck.choose_action")],
             )
         )
 
@@ -432,8 +436,8 @@ def repair_deck_spec(
         if i > 2 and i < len(slides) and len(bullets) < 2:
             bullets.extend(
                 [
-                    f"Practical tip {len(bullets) + 1} for {slide.title.lower()}.",
-                    f"Discussion prompt about {slide.title.lower()}.",
+                    tr("deck.practical_tip", n=len(bullets) + 1, topic=slide.title.lower()),
+                    tr("deck.discussion_prompt", topic=slide.title.lower()),
                 ]
             )
         notes = slide.notes.strip() if slide.notes else ""

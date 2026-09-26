@@ -572,7 +572,9 @@ def _render_panel(container, theme_tokens, downloader, on_save_reload) -> None:
                                 f"{image_entry.get('label', image_name)} ({image_entry.get('size', '')})"
                             ).classes("text-sm")
                             if image_entry.get("desc"):
-                                ui.label(image_entry["desc"]).classes(f"text-xs {muted}")
+                                from services.catalog_i18n import localized_desc
+
+                                ui.label(localized_desc(image_entry)).classes(f"text-xs {muted}")
                         if image_is_cached:
                             with ui.row().classes("items-center gap-1"):
                                 ui.badge(t("config.installed_badge"), color="green").props("outline")

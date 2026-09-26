@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pipeline.capability_runtime.chat_runner import generate_text_sync
+from pipeline.i18n import t as _tr  # noqa: E402
 
 
 def _strip_fences(text: str) -> str:
@@ -69,7 +70,7 @@ def explain_excerpt(
     """Explain or answer questions about a highlighted excerpt; does not revise it."""
     excerpt = (excerpt or "").strip()
     if not excerpt:
-        return "No excerpt was provided."
+        return _tr("preview.no_excerpt")
 
     question = (question or "").strip()
     if not question:
@@ -96,7 +97,7 @@ def explain_excerpt(
     with ResourceGovernor.acquire("llm_chat"):
         response = chat_client.chat(**chat_kwargs)
     answer = (response.get("message", {}).get("content") or "").strip()
-    return answer or "I couldn't generate an answer for that selection."
+    return answer or _tr("preview.no_answer")
 
 
 def splice_excerpt(

@@ -8,6 +8,7 @@ chart_figures_ready flag the renderer requires to actually draw the image.
 from __future__ import annotations
 
 from services.session.chat_post import _refresh_chat, _schedule
+from pipeline.i18n import t as _tr  # noqa: E402
 
 
 def post_image_to_chat(
@@ -26,7 +27,7 @@ def post_image_to_chat(
     path = (path or "").strip()
     if not path:
         return
-    title = (title or caption or "Generated image").strip()
+    title = (title or caption or _tr("chat.generated_image")).strip()
 
     from services.graph_generation.models import ChartArtifact
     from services.session import state

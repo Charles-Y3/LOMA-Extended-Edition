@@ -6,6 +6,7 @@ import re
 
 from services.sandbox.interactive import run_python_script, stop_sandbox_run
 from services.sandbox.runner import run_sandbox
+from pipeline.i18n import t as _tr  # noqa: E402
 
 
 def extract_python_code(text: str) -> str:
@@ -39,10 +40,7 @@ def deliver_software_content(
     code = extract_python_code(content)
     if not code:
         sink.log("No Python code found in output.")
-        sink.set_assistant_content(
-            "I could not extract runnable Python from the model output. "
-            "Try again or switch to **Software** output format and rephrase your request."
-        )
+        sink.set_assistant_content(_tr("chat.software_no_code"))
         return ""
 
     stop_sandbox_run()
@@ -59,11 +57,7 @@ def deliver_software_content(
         state.sandbox_status = "fail"
         state.sandbox_output = str(check.get("output") or "Compile check failed")
         sink.log(f"Sandbox compile check: {state.sandbox_output[:200]}")
-        sink.set_assistant_content(
-            "**Software delivery failed compile check.**\n\n"
-            f"Details are in the **Sandbox** tab under Output.\n\n"
-            f"```\n{state.sandbox_output[:800]}\n```"
-        )
+        sink.set_assistant_content(_tr("chat.software_compile_failed", output=state.sandbox_output[:800]))
         _refresh_sandbox_ui()
         _focus_sandbox_tab()
         return code

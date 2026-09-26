@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from pipeline.deliverables.presentation_deck import DeckSpec, SlideSpec
+from pipeline.i18n import t as tr
 from pipeline.deliverables.presentation_limits import MAX_BULLETS_PER_SLIDE, MAX_SLIDES, MIN_SLIDES
 
 LogFn = Callable[[str], None] | None
@@ -442,11 +443,11 @@ def author_slide(
 
     if not bullets:
         bullets = [p.summary[:140] for p in points if p.summary][:MAX_BULLETS_PER_SLIDE] or [
-            f"{title_hint} — see speaker notes for detail."
+            tr("deck.see_notes", title=title_hint)
         ]
     if not notes:
         highlight = "; ".join(b.rstrip(".") for b in bullets[:2])
-        notes = f"Walk through {title}, emphasizing: {highlight}."
+        notes = tr("deck.notes_walk", title=title, highlight=highlight)
 
     return {"title": title, "bullets": bullets, "notes": notes, "image_description": image_desc}
 
@@ -555,7 +556,7 @@ def build_deck_via_pipeline(
             SlideSpec(index=1, layout="title", title=deck_title, subtitle="", bullets=[]),
         ]
         agenda_bullets = [a["title"] for a in authored if a["title"]][:MAX_BULLETS_PER_SLIDE]
-        slides.append(SlideSpec(index=2, layout="content", title="Agenda", bullets=agenda_bullets))
+        slides.append(SlideSpec(index=2, layout="content", title=tr("deck.agenda"), bullets=agenda_bullets))
         for i, a in enumerate(authored):
             slides.append(SlideSpec(
                 index=3 + i,
@@ -566,13 +567,13 @@ def build_deck_via_pipeline(
                 visual_type="image" if a["image_description"] else "none",
                 visual_description=a["image_description"],
             ))
-        closing_bullets = [a["title"] for a in authored[-3:] if a["title"]] or ["Thank you."]
+        closing_bullets = [a["title"] for a in authored[-3:] if a["title"]] or [tr("deck.thank_you")]
         slides.append(SlideSpec(
             index=len(slides) + 1,
             layout="closing",
-            title="Key Takeaways",
+            title=tr("deck.key_takeaways"),
             bullets=closing_bullets,
-            notes="Recap the main points and close.",
+            notes=tr("deck.closing_notes"),
         ))
 
         _log(log_fn, f"Deck pipeline: built {len(slides)} slides from {len(points)} extracted key point(s).")

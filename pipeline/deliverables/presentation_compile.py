@@ -72,6 +72,39 @@ _SLIDE_IMAGE_MARKER_RE = re.compile(
 
 
 
+def _collect_slide_image_descriptions(slides_content: list[str], slide_visuals: list[dict] | None) -> list[str]:
+    """Every image description the per-slide loop below can end up using, found the same three
+    ways it finds them: [IMAGE:] markers (whole-line or inline in a bullet), image lines that
+    partition_slide_extras() pulls out of the bullets, and the planner's visual_description."""
+    from services.presentation_markdown import partition_slide_extras, sanitize_bullet_text
+
+    found: list[str] = []
+
+    def _add(text: str) -> None:
+        text = (text or "").strip()
+        if text and text not in found:
+            found.append(text)
+
+    for slide in slides_content:
+        for m in re.finditer(_SLIDE_IMAGE_MARKER_RE.pattern, slide, re.IGNORECASE | re.MULTILINE):
+            _add(m.group(1) or m.group(2) or "")
+        bullets = []
+        for raw in slide.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or re.match(r"^---\s*Slide\s+\d+\s*---\s*$", line, re.I):
+                continue
+            line = re.sub(r"^\s*(?:[\*\-]|\d+[\).\]])\s+", "", line)
+            bullets.append(sanitize_bullet_text(_SLIDE_IMAGE_MARKER_RE.sub("", line).strip()))
+        try:
+            _, extra_image, _ = partition_slide_extras([b for b in bullets if b])
+        except Exception:
+            extra_image = ""
+        _add(extra_image)
+    for visual in slide_visuals or []:
+        _add(str((visual or {}).get("visual_description") or ""))
+    return found
+
+
 def compile_agentic_presentation(
     markdown: str,
     original_filename: str,
@@ -162,6 +195,29 @@ def compile_agentic_presentation(
                     "Download one from Settings → Model Library."
                 )
 
+    if include_images:
+        # Translate every slide's image description (and the query slice each photo prompt
+        # appends) in ONE LLM call up front. Doing it lazily per slide would make the resource
+        # governor evict and reload the image pipeline for every slide (an LLM call evicts the
+        # warm pipeline) — see services.image_generation.pretranslate_prompts.
+        try:
+            from services.image_generation import pretranslate_prompts
+
+            _descs = _collect_slide_image_descriptions(slides_content, slide_visuals)
+            try:
+                from services.image_generation import _log_translation
+
+                _log_translation(
+                    f"deck pre-pass: {len(slides_content)} slide(s), {len(slide_visuals or [])} planner visual(s), "
+                    f"{len(_descs)} image description(s) found"
+                )
+            except Exception:
+                pass
+            if _descs:
+                pretranslate_prompts(_descs + [(query or "")[:120]])
+        except Exception:
+            pass
+
     # NOTE: deliberately NOT wrapped in one outer ResourceGovernor.acquire("image_gen")
     # for the whole loop — a diagram/infographic slide's resolve_marker_visual() call
     # makes its own LLM call (see services/marker_visual.py) on this same thread, and an
@@ -240,6 +296,11 @@ def compile_agentic_presentation(
                     bullet_points.append(bullet)
 
         bullet_points, extra_image, extra_notes = partition_slide_extras(bullet_points)
+        # A model that wrote the standard 'Agenda' / 'Key Takeaways' titles in English (the deck
+        # instructions name them in English) still gets them in the user's language.
+        from pipeline.deck_i18n import localize_standard_title
+
+        title_text = localize_standard_title(title_text)
         if extra_image and not image_desc:
             image_desc = extra_image
         if extra_notes:
@@ -668,7 +729,15 @@ def _resolve_slide_image(
         deps_ok, _ = image_generation_deps_available()
         if not deps_ok:
             return None, []
-        photo_prompt = prepare_image_prompt(f"{desc}. Presentation slide visual. {query[:120]}")
+        # The query slice is only topic context for the photo prompt. Use its English version
+        # (pre-translated once for the whole deck); if that failed, drop it rather than send the
+        # image model non-English text or trigger a per-slide LLM call (which swaps models).
+        from services.image_generation import _needs_english, ensure_english_prompt
+
+        query_context = ensure_english_prompt((query or "")[:120])
+        if _needs_english(query_context):
+            query_context = ""
+        photo_prompt = prepare_image_prompt(f"{desc}. Presentation slide visual. {query_context}".strip())
         path = os.path.join(GENERATED_DIR, f"slide_{slide_number}_visual.png")
         result_path, sources = resolve_marker_visual(
             desc, output_path=path, prof=prof, model=model, log_fn=log_fn, photo_prompt=photo_prompt,
