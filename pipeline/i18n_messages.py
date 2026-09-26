@@ -367,3 +367,14 @@ _CHARTS: dict[str, dict[str, str]] = {
 }
 for _loc, _keys in _CHARTS.items():
     MESSAGE_STRINGS[_loc].update(_keys)
+
+
+_UNTRANSLATED: dict[str, dict[str, str]] = {
+    "en": {"chat.image_prompt_untranslated": "I couldn't prepare that image request in English, which the image model needs. Please try again."},
+    "zh_tw": {"chat.image_prompt_untranslated": "我無法將這個圖像請求轉成英文（圖像模型需要英文）。請再試一次。"},
+    "zh_cn": {"chat.image_prompt_untranslated": "我无法将这个图像请求转成英文（图像模型需要英文）。请再试一次。"},
+    "es": {"chat.image_prompt_untranslated": "No pude preparar esa solicitud de imagen en inglés, que es lo que necesita el modelo de imágenes. Inténtalo de nuevo."},
+    "de": {"chat.image_prompt_untranslated": "Ich konnte diese Bildanfrage nicht auf Englisch vorbereiten, was das Bildmodell benötigt. Bitte versuche es erneut."},
+}
+for _loc, _keys in _UNTRANSLATED.items():
+    MESSAGE_STRINGS[_loc].update(_keys)

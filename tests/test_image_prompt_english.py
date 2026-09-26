@@ -15,10 +15,10 @@ ZH_QUERY = "製作一份關於自然與城市的簡報，風格簡潔明亮"
 @pytest.fixture(autouse=True)
 def _clean_glossary():
     ig._ENGLISH_GLOSSARY.clear()
-    ig._breaker_until = 0.0
+    ig._failed_until.clear()
     yield
     ig._ENGLISH_GLOSSARY.clear()
-    ig._breaker_until = 0.0
+    ig._failed_until.clear()
 
 
 def _numbered_lines(content: str) -> list[str]:
@@ -41,9 +41,15 @@ class FakeLLM:
 
     def __call__(self, messages):
         self.calls += 1
-        lines = _numbered_lines(messages[-1]["content"])
+        content = messages[-1]["content"]
+        lines = _numbered_lines(content)
+        single = not lines  # the plain (un-numbered) single-prompt format
+        if single:
+            lines = [f"1. {content}"]
         if self.reply:
             return self.reply(lines)
+        if single:
+            return "english scene 0"  # a plain reply with NO "1." prefix, like the real 4B
         return "\n".join(f"{i + 1}. english scene {i}" for i, _ in enumerate(lines))
 
 
@@ -109,41 +115,129 @@ def test_llm_failure_falls_back_to_original(monkeypatch):
     assert ig.ensure_english_prompt(ZH_DESCS[0]) == ZH_DESCS[0]
 
 
-def test_model_that_echoes_chinese_gets_one_attempt_then_the_breaker_stops_all_llm_calls(monkeypatch):
-    """A model that echoes Chinese back (the 4B did, before the prompt fix) must cost ONE call.
-    Live run: a failed batch fell back to one LLM call per slide -> a model swap per slide."""
-    fake = FakeLLM(reply=lambda lines: "\n".join(f"{i + 1}. {t}" for i, t in enumerate(_source_lines(lines))))
+def test_a_failed_batch_costs_one_call_and_never_disables_translation(monkeypatch):
+    """A model that echoes Chinese back for the numbered batch. There is NO breaker: slower-but-produces-something
+    beats fast-but-nothing, so each later item is simply tried individually (and can succeed)."""
+    def reply(lines):
+        if len(lines) > 1:  # the numbered batch: echo the Chinese back
+            return "\n".join(f"{i + 1}. {t}" for i, t in enumerate(_source_lines(lines)))
+        return "A fluffy dog running in a park"  # a single prompt in the plain format works
+
+    fake = FakeLLM(reply=reply)
     monkeypatch.setattr(ig, "_llm_translate", fake)
     ig.pretranslate_prompts(ZH_DESCS)
-    assert fake.calls == 1, "no retry when nothing at all was translated"
+    assert fake.calls == 1, "a failed batch is not repeated in the same format"
     assert not ig._ENGLISH_GLOSSARY
-    for desc in ZH_DESCS:  # every later slide falls back to the original with NO further LLM call
-        assert ig.ensure_english_prompt(desc) == desc
-    assert fake.calls == 1
+    for desc in ZH_DESCS:  # every item then gets its own attempt, and succeeds
+        assert ig.ensure_english_prompt(desc) == "A fluffy dog running in a park"
+    assert fake.calls == 1 + len(ZH_DESCS)
 
 
-def test_breaker_expires(monkeypatch):
+def test_identical_text_that_just_failed_is_not_re_asked_but_other_text_is(monkeypatch):
     fake = FakeLLM(reply=lambda lines: "sorry")
     monkeypatch.setattr(ig, "_llm_translate", fake)
+    assert ig.ensure_english_prompt("一隻狗") == "一隻狗"
+    after_first = fake.calls  # plain + numbered format
+    assert ig.ensure_english_prompt("一隻狗") == "一隻狗"
+    assert fake.calls == after_first, "the identical text just failed: temperature 0 gives the same answer"
+    ig.ensure_english_prompt("一隻貓")
+    assert fake.calls > after_first, "a different prompt is always tried"
+
+
+def test_the_identical_text_guard_expires(monkeypatch):
+    fake = FakeLLM(reply=lambda lines: "sorry")
+    monkeypatch.setattr(ig, "_llm_translate", fake)
+    ig.ensure_english_prompt("一隻狗")
+    n = fake.calls
+    ig._failed_until.clear()  # simulate the short guard expiring
+    ig.ensure_english_prompt("一隻狗")
+    assert fake.calls > n
+
+
+def test_batch_prompt_has_examples_and_repeats_the_instruction_in_every_user_turn():
+    msgs = ig._batch_messages(ZH_DESCS[:2])
+    user_turns = [m["content"] for m in msgs if m["role"] == "user"]
+    assert len(user_turns) == len(ig._TRANSLATE_EXAMPLES) + 1
+    assert all(t.startswith(ig._TRANSLATE_INSTRUCTION) for t in user_turns)
+
+
+def test_single_prompt_uses_plain_few_shot_turns_ending_with_the_text():
+    msgs = ig._single_messages(ZH_DESCS[0])
+    assert msgs[-1] == {"role": "user", "content": ZH_DESCS[0]}
+    assert len([m for m in msgs if m["role"] == "assistant"]) == len(ig._SINGLE_EXAMPLES)
+
+
+def test_reply_without_numbering_is_accepted_for_a_single_prompt(monkeypatch):
+    """Live bug: the 4B translated correctly but answered 'A fluffy cat…' with no '1.' prefix, which the numbered
+    parser discarded as 'not English' -> Chinese went to the image model -> unrelated pictures."""
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: "A fluffy orange house cat lying on a sunlit window sill")
+    assert ig.ensure_english_prompt(ZH_DESCS[0]) == "A fluffy orange house cat lying on a sunlit window sill"
+
+
+def test_unnumbered_batch_reply_is_mapped_by_position(monkeypatch):
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: "\n".join(f"english {i}" for i in range(len(ZH_DESCS))))
     ig.pretranslate_prompts(ZH_DESCS)
-    assert fake.calls == 1
-    ig._breaker_until = 0.0  # simulate the pause elapsing
-    ig.pretranslate_prompts(ZH_DESCS)
+    assert len(ig._ENGLISH_GLOSSARY) == len(ZH_DESCS)
+
+
+def test_single_prompt_falls_back_to_the_numbered_format_when_the_plain_one_fails(monkeypatch):
+    def reply(lines):
+        return "".join(lines[0].split(". ", 1)[1:])  # echo -> fails; overridden below for numbered
+
+    calls = {"n": 0}
+
+    def llm(messages):
+        calls["n"] += 1
+        content = messages[-1]["content"]
+        if content.startswith(ig._TRANSLATE_INSTRUCTION):  # numbered format
+            return "1. a dog running in a park"
+        return content  # plain format: model echoes the Chinese
+
+    monkeypatch.setattr(ig, "_llm_translate", llm)
+    assert ig.ensure_english_prompt("一隻狗在公園奔跑") == "a dog running in a park"
+    assert calls["n"] == 2
+
+
+def test_untranslatable_chinese_is_refused_not_sent_to_the_image_model(monkeypatch):
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: "還是中文")
+    with pytest.raises(ig.ImagePromptUntranslatedError) as exc:
+        ig.require_english_prompt("一隻狗在公園奔跑")
+    assert "untranslated" not in str(exc.value) and str(exc.value).strip()
+
+
+def test_accented_latin_text_is_passed_through_when_translation_fails(monkeypatch):
+    """CLIP copes with Spanish/German; only CJK (unreadable to it) is refused."""
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: "no english here ñ")
+    assert ig.require_english_prompt("un perro pequeño") == "un perro pequeño"
+
+
+def test_generate_image_refuses_before_drawing_when_the_prompt_cannot_be_translated(monkeypatch, tmp_path):
+    monkeypatch.setattr(ig, "GENERATED_IMAGE_DIR", str(tmp_path))
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: "還是中文")  # the model never returns English
+    drew = {"n": 0}
+    monkeypatch.setattr(ig, "_run_generate_image", lambda **kw: drew.__setitem__("n", drew["n"] + 1))
+    with pytest.raises(ig.ImagePromptUntranslatedError):
+        ig.generate_image("一隻毛茸茸的橘色家貓")
+    assert drew["n"] == 0, "the diffusion model must never see untranslated Chinese"
+
+
+def test_a_failed_single_chat_prompt_never_switches_translation_off_for_the_next_request(monkeypatch):
+    """Live bug: one bad reply for 狗 paused translation, so the next request (貓) was never translated."""
+    replies = iter(["sorry", "sorry", "A fluffy orange cat lying on a sunny window sill", ""])
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: next(replies))
+    assert ig.ensure_english_prompt("一隻狗") == "一隻狗"  # plain + numbered format both failed
+    assert ig.ensure_english_prompt("一隻毛茸茸的橘色家貓") == "A fluffy orange cat lying on a sunny window sill"
+
+
+def test_single_prompt_tries_the_plain_format_then_the_numbered_one(monkeypatch):
+    fake = FakeLLM(reply=lambda lines: "sorry")
+    monkeypatch.setattr(ig, "_llm_translate", fake)
+    ig.ensure_english_prompt("一隻狗")
     assert fake.calls == 2
 
 
-def test_prompt_has_examples_and_repeats_the_instruction_in_every_user_turn(monkeypatch):
-    seen = {}
-
-    def spy(messages):
-        seen["messages"] = messages
-        return "1. english"
-
-    monkeypatch.setattr(ig, "_llm_translate", spy)
-    ig.ensure_english_prompt(ZH_DESCS[0])
-    user_turns = [m["content"] for m in seen["messages"] if m["role"] == "user"]
-    assert len(user_turns) == len(ig._TRANSLATE_EXAMPLES) + 1
-    assert all(t.startswith(ig._TRANSLATE_INSTRUCTION) for t in user_turns)
+def test_there_is_no_translation_pause_mechanism_left():
+    assert not hasattr(ig, "_breaker_until") and not hasattr(ig, "_BREAKER_SECONDS")
 
 
 def _collector():
@@ -236,6 +330,8 @@ def _count_pipeline_evictions(monkeypatch):
     def _translate(messages):
         with gov.ResourceGovernor.acquire("llm_chat"):
             lines = _numbered_lines(messages[-1]["content"])
+            if not lines:  # plain single-prompt format
+                return "english scene 0"
             return "\n".join(f"{i + 1}. english scene {i}" for i, _ in enumerate(lines))
 
     monkeypatch.setattr(ig, "_llm_translate", _translate)
@@ -276,15 +372,15 @@ def _capture_photo_prompt(monkeypatch, description, query):
 def test_slide_photo_prompt_drops_untranslatable_query_instead_of_sending_chinese(monkeypatch):
     """Live deck: the planner wrote English image descriptions, only the Chinese query slice needed
     translating, and translating an imperative sentence alone failed -> every slide called the LLM."""
-    import time
-
-    ig._breaker_until = time.monotonic() + 300  # translation is unavailable
-    calls = FakeLLM()
+    calls = FakeLLM(reply=lambda lines: "sorry")  # the model can't translate the query
     monkeypatch.setattr(ig, "_llm_translate", calls)
     prompt = _capture_photo_prompt(monkeypatch, "a bustling night market at dusk", ZH_QUERY)
     assert "night market" in prompt
     assert not ig._needs_english(prompt), prompt
-    assert calls.calls == 0, "no LLM call may happen per slide"
+    n = calls.calls
+    for _ in range(3):  # later slides carry the identical query slice: not re-asked
+        _capture_photo_prompt(monkeypatch, "a quiet harbour at dawn", ZH_QUERY)
+    assert calls.calls == n
 
 
 def test_slide_photo_prompt_uses_the_pretranslated_query(monkeypatch):
@@ -295,3 +391,16 @@ def test_slide_photo_prompt_uses_the_pretranslated_query(monkeypatch):
     prompt = _capture_photo_prompt(monkeypatch, "a bustling night market at dusk", ZH_QUERY)
     assert "english scene 0" in prompt
     assert calls.calls == 0
+
+
+@pytest.mark.parametrize(
+    "reply", ["sorry", "Sorry, I can't translate that.", "Sure! Here's the translation: a dog", "I cannot help with that", "Translation: a dog"]
+)
+def test_model_chatter_is_not_accepted_as_a_translation(monkeypatch, reply):
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: reply)
+    assert ig.ensure_english_prompt("一隻狗在公園奔跑") == "一隻狗在公園奔跑"
+
+
+def test_absurdly_long_reply_is_rejected(monkeypatch):
+    monkeypatch.setattr(ig, "_llm_translate", lambda m: "a dog " * 300)
+    assert ig.ensure_english_prompt("狗") == "狗"

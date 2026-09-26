@@ -1383,58 +1383,124 @@ def _llm_translate(messages: list[dict[str, str]]) -> str:
     )
 
 
-# Circuit breaker: once a translation attempt yields NOTHING usable (model can't/won't translate),
-# stop calling the LLM for a while. Each call makes the resource governor evict the image pipeline
-# and reload the chat model, so retrying per slide would turn one failure into a swap per slide.
-_BREAKER_SECONDS = 300.0
-_breaker_until = 0.0
+# NO circuit breaker, on purpose. An earlier version paused translation after a failure to avoid one LLM call
+# (= one model swap) per slide. That traded a recoverable slowdown for a hard failure: after one bad reply every
+# following request was never translated and drew random pictures. Slower-but-produces-something wins, so a
+# failure is simply retried by the next call. The only guard is against re-sending the IDENTICAL text that just
+# failed (temperature 0 -> same answer), and only for a couple of minutes.
+_FAILED_TTL = 120.0
+_failed_until: dict[str, float] = {}
+
+_SINGLE_SYSTEM = "Translate the Chinese, Spanish or German text into English. Output only the English translation."
+_SINGLE_EXAMPLES = (
+    ("夜市裡的小吃攤與人群", "Snack stalls and crowds in a night market"),
+    ("一隻黃金獵犬在公園奔跑，陽光明媚，高畫質", "A golden retriever running in a park, bright sunshine, high quality"),
+    ("狗", "dog"),
+)
+
+
+def _single_messages(text: str) -> list[dict[str, str]]:
+    """One prompt, plain few-shot chat turns (no numbering): a lone numbered line made the 4B answer without the
+    "1." prefix, which the numbered parser then threw away as "not English"."""
+    msgs = [{"role": "system", "content": _SINGLE_SYSTEM}]
+    for user, reply in _SINGLE_EXAMPLES:
+        msgs += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
+    msgs.append({"role": "user", "content": text})
+    return msgs
+
+
+def _batch_messages(items: list[str]) -> list[dict[str, str]]:
+    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(items))
+    msgs = [{"role": "system", "content": _TRANSLATE_SYSTEM}]
+    for ex_user, ex_reply in _TRANSLATE_EXAMPLES:
+        msgs += [
+            {"role": "user", "content": _TRANSLATE_INSTRUCTION + ex_user},
+            {"role": "assistant", "content": ex_reply},
+        ]
+    msgs.append({"role": "user", "content": _TRANSLATE_INSTRUCTION + numbered})
+    return msgs
+
+
+def _parse_reply(raw: str, count: int) -> dict[int, str]:
+    """{1-based index: English text}. Accepts "1. text" lines; if the model dropped the numbering, maps plain lines
+    by position when there are exactly `count` of them."""
+    numbered: dict[int, str] = {}
+    plain: list[str] = []
+    for line in (raw or "").splitlines():
+        if not line.strip():
+            continue
+        m = _NUMBERED_LINE_RE.match(line)
+        if m:
+            numbered[int(m.group(1))] = _clean_english(m.group(2))
+        else:
+            plain.append(_clean_english(line))
+    if numbered:
+        return numbered
+    if len(plain) == count:
+        return {i + 1: t for i, t in enumerate(plain)}
+    return {}
+
+
+_CHATTER_PREFIXES = (
+    "sorry", "i'm sorry", "i am sorry", "i cannot", "i can't", "i can not", "i'm unable", "unable to", "sure", "certainly",
+    "of course", "here is", "here's", "here are", "translation", "the translation", "as an ai", "i apologize",
+)
+
+
+def _plausible_translation(english: str, source: str) -> bool:
+    """A model refusal or chatter ("Sorry, I can't…", "Sure! Here's the translation:") contains no CJK, so the
+    'is it English' check alone would accept it as the image prompt. Reject those and absurd length ratios."""
+    low = english.strip().lower()
+    if not low or low.startswith(_CHATTER_PREFIXES):
+        return False
+    return len(english) <= 12 * max(len(source), 1) + 120
 
 
 def _translate_lines(texts: list[str]) -> dict[str, str]:
-    """One LLM call translating `texts` (numbered lines, few-shot); returns {source: English}
-    for every line that came back as valid English. If the first call translated SOME lines the
-    rest are retried once together; if it translated NONE the breaker opens and nothing more is
-    attempted for a while (the caller keeps the original text)."""
+    """Translate `texts` to English with as few LLM calls as possible; returns {source: English} for every text that
+    came back as valid English. A single prompt uses the plain format first and the numbered format as a second
+    attempt (and vice versa for a batch's failed lines). Never disables translation: a failure just means the next
+    call tries again (see the note above _FAILED_TTL)."""
     import time
 
-    global _breaker_until
-    if time.monotonic() < _breaker_until:
-        return {}
     result: dict[str, str] = {}
-    pending = list(dict.fromkeys(" ".join(t.split()) for t in texts if t and t.strip()))
+    last_error = ""
+    last_reply = ""
+    now = time.monotonic()
+    pending = [
+        t
+        for t in dict.fromkeys(" ".join(x.split()) for x in texts if x and x.strip())
+        if _failed_until.get(t, 0.0) <= now  # the identical text just failed: same answer, don't re-ask
+    ]
     for attempt in range(2):
         if not pending:
             break
-        numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(pending))
-        messages = [{"role": "system", "content": _TRANSLATE_SYSTEM}]
-        for ex_user, ex_reply in _TRANSLATE_EXAMPLES:
-            messages += [
-                {"role": "user", "content": _TRANSLATE_INSTRUCTION + ex_user},
-                {"role": "assistant", "content": ex_reply},
-            ]
-        messages.append({"role": "user", "content": _TRANSLATE_INSTRUCTION + numbered})
+        plain = len(pending) == 1 and attempt == 0
+        messages = _single_messages(pending[0]) if plain else _batch_messages(pending)
         try:
             raw = _llm_translate(messages)
-        except Exception:
+        except Exception as exc:  # shown in the failure log below (was swallowed silently)
             raw = ""
-        by_index: dict[int, str] = {}
-        for line in (raw or "").splitlines():
-            m = _NUMBERED_LINE_RE.match(line)
-            if m:
-                by_index[int(m.group(1))] = _clean_english(m.group(2))
+            last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
+        last_reply = raw
+        by_index = _parse_reply(raw, len(pending))
         still: list[str] = []
         for i, src in enumerate(pending):
             eng = by_index.get(i + 1, "")
-            if eng and not _needs_english(eng):
+            if eng and not _needs_english(eng) and _plausible_translation(eng, src):
                 result[src] = eng
             else:
                 still.append(src)
         pending = still
-        if not result:  # nothing usable on the first pass -> the model won't do this; don't retry
-            break
-    if not result:
-        _breaker_until = time.monotonic() + _BREAKER_SECONDS
-        _log_translation("model did not return English; using the original prompts (retry paused 5 min)")
+        if not result and len(texts) > 1:
+            break  # a whole batch failed in the numbered format: no point repeating it
+    if not result and pending:
+        if len(texts) == 1:  # only a lone prompt: a batch's items may still succeed one by one
+            _failed_until[pending[0]] = time.monotonic() + _FAILED_TTL
+        _log_translation(
+            f"model did not return English for {len(pending)} prompt(s) "
+            f"(reply={(last_reply or '')[:80]!r}, error={last_error or 'none'}); each will be retried individually"
+        )
     return result
 
 
@@ -1484,16 +1550,32 @@ def ensure_english_prompt(prompt: str) -> str:
     hit = _from_glossary(text)
     if hit:
         return hit
-    import time
-
-    if time.monotonic() >= _breaker_until:
-        _log_translation(f"single-prompt LLM translation (no pre-translated match), {len(text)} chars")
+    _log_translation(f"single-prompt LLM translation (no pre-translated match), {len(text)} chars")
     translated = _translate_lines([text])
     english = translated.get(" ".join(text.split()))
     if english:
         _glossary_put(text, english)
         return english
     return text
+
+
+_CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+class ImagePromptUntranslatedError(Exception):
+    """The prompt is still Chinese/Japanese/Korean after translation: the image model cannot read it and
+    would draw something unrelated, so generating is worse than telling the user."""
+
+
+def require_english_prompt(prompt: str) -> str:
+    """ensure_english_prompt(), but raises instead of returning CJK text the diffusion model can't read.
+    (Latin-script languages with accents fall through unchanged: CLIP copes with those.)"""
+    english = ensure_english_prompt(prompt)
+    if _CJK_RE.search(english):
+        from pipeline.i18n import t as tr
+
+        raise ImagePromptUntranslatedError(tr("chat.image_prompt_untranslated"))
+    return english
 
 
 def generate_image(
@@ -1524,7 +1606,7 @@ def generate_image(
     """
     os.makedirs(GENERATED_IMAGE_DIR, exist_ok=True)
     raw_prompt = (prompt or "").strip()
-    prompt = ensure_english_prompt(prepare_image_prompt(raw_prompt))
+    prompt = require_english_prompt(prepare_image_prompt(raw_prompt))
 
     if not model_id:
         try:
