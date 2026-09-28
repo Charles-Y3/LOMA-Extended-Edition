@@ -40,7 +40,13 @@ def run_grounded_chat(inputs: dict[str, Any], config: dict[str, Any]) -> dict[st
     sink.set_assistant_content(tr("chat.searching_web"))
     sink.refresh_chat()
 
-    web_ctx, sources = gather_grounded_context(request.user_input, log_fn=sink.log)
+    # topic_relevance=True: credibility-filter hits and Wikipedia-fallback like every
+    # other grounding caller now (see gather_grounded_context's docstring) — chat used
+    # to be the one path without either, so a blocked/empty search engine left it with
+    # no fallback and no relevance filtering on whatever it did get.
+    web_ctx, sources = gather_grounded_context(
+        request.user_input, log_fn=sink.log, topic_relevance=True
+    )
 
     if not web_ctx:
         sink.set_assistant_content(tr("chat.grounded_fetch_failed"))

@@ -399,7 +399,7 @@ def _run_generation_step(
             from services.session import state as loma_state
 
             ground_ctx, _ground_sources = resolve_generation_context(
-                cfg.user_query, settings=loma_state.current_settings, broad_trigger=True, log_fn=cfg.sink.log,
+                cfg.user_query, settings=loma_state.current_settings, log_fn=cfg.sink.log,
             )
             if ground_ctx:
                 system += (
@@ -500,7 +500,7 @@ def _run_generation_step(
             from services.session import state as loma_state
 
             ground_ctx, _ground_sources = resolve_generation_context(
-                cfg.user_query, settings=loma_state.current_settings, broad_trigger=True,
+                cfg.user_query, settings=loma_state.current_settings,
                 log_fn=cfg.sink.log,
             )
             # gather_grounded_context can return several page snippets (up to ~3500
@@ -1329,7 +1329,7 @@ def _run_poster_generation(
 
     model = resolve_general_model(prof)
     context, _sources = resolve_generation_context(
-        user_query, bundle=bundle, settings=state.current_settings, broad_trigger=True, log_fn=sink.log,
+        user_query, bundle=bundle, settings=state.current_settings, log_fn=sink.log,
     )
     try:
         from services.image_generation import ImageGenerationDeclinedError
@@ -1368,11 +1368,13 @@ def _run_diagram_generation(
     from pipeline.base.grounding import resolve_generation_context
 
     model = resolve_general_model(prof)
-    # broad_trigger=False: most diagrams visualize the user's own process/workflow,
-    # not an external fact that needs verifying — grounded only when a source is
-    # attached, or the request phrasing itself clearly needs current web facts.
+    # Grounded only when a source is attached, or the query itself matches a
+    # live-fact/explicit-search pattern (pipeline/base/grounding.py) — most
+    # diagrams visualize the user's own process/workflow and won't match, same as
+    # before, but a diagram that genuinely is about a live fact now gets the same
+    # treatment a chart/infographic about the same fact would.
     context, _sources = resolve_generation_context(
-        user_query, bundle=bundle, settings=state.current_settings, broad_trigger=False, log_fn=sink.log,
+        user_query, bundle=bundle, settings=state.current_settings, log_fn=sink.log,
     )
     try:
         from services.diagram_generation import generate_diagram
@@ -1411,11 +1413,15 @@ def _run_infographic_generation(
     from pipeline.base.grounding import resolve_generation_context
 
     model = resolve_general_model(prof)
-    # broad_trigger=True: an infographic's entire purpose is presenting real facts,
-    # so ground by default (attached source, else a web search) rather than only
-    # when the phrasing itself screams "current event".
+    # Attached source wins outright; otherwise a web search is attempted only when
+    # the query itself matches a live-fact/explicit-search pattern (pipeline/base/
+    # grounding.py) — not just because this is an infographic. When neither applies,
+    # the author LLM below still runs and answers from its own knowledge, refusing
+    # only if it isn't confident (see infographic_generation.py's insufficient_data
+    # check) — an infographic about an evergreen topic no longer hard-refuses just
+    # because a search was never attempted for it.
     context, _sources = resolve_generation_context(
-        user_query, bundle=bundle, settings=state.current_settings, broad_trigger=True, log_fn=sink.log,
+        user_query, bundle=bundle, settings=state.current_settings, log_fn=sink.log,
     )
     try:
         if kind == "infographic_stat":
@@ -1454,10 +1460,10 @@ def _run_chart_generation(
     from pipeline.base.grounding import resolve_generation_context
 
     model = resolve_general_model(prof)
-    # broad_trigger=True: a chart states real data by definition, same policy as
-    # the infographic layouts.
+    # Same policy as the infographic layouts above — content-based, not
+    # type-based; see that function's comment.
     context, sources = resolve_generation_context(
-        user_query, bundle=bundle, settings=state.current_settings, broad_trigger=True, log_fn=sink.log,
+        user_query, bundle=bundle, settings=state.current_settings, log_fn=sink.log,
     )
     try:
         from services.chart_generation import generate_chart

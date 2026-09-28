@@ -68,7 +68,7 @@ def resolve_source_material(
     from pipeline.base.grounding import resolve_generation_context
 
     ctx, _sources = resolve_generation_context(
-        query, settings=settings, broad_trigger=True, log_fn=log_fn,
+        query, settings=settings, log_fn=log_fn,
     )
     if ctx.strip():
         _log(log_fn, "Deck pipeline: using web search material.")

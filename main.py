@@ -413,6 +413,28 @@ if os.environ.get("LOMA_SELFTEST") == "1":
         from services.bootstrap.connectivity import check_connectivity
 
         conn = check_connectivity()
+
+        # Web grounding (chat/chart/diagram/infographic) depends on Playwright actually
+        # being able to launch a browser — `import playwright` succeeding proves nothing,
+        # since the driver it spawns as a subprocess (playwright/driver/node[.exe] +
+        # driver/package/*.js, ~106MB) is data PyInstaller's import scan never traces (see
+        # packaging/loma_extended.spec's collect_all('playwright') comment). A build that
+        # dropped it shipped with web search silently returning zero results forever —
+        # every failed browser launch is caught deep inside
+        # extensions/research/web_search.py's _google_search_on_page()/_bing_search_on_page()
+        # and just logged, so nothing ever surfaced this to a user beyond a generic "no
+        # grounding material" refusal. This launches a real headless browser via the same
+        # code path web search uses (system Edge/Chrome first, no bundled browser binaries
+        # needed) and immediately closes it.
+        web_search_browser = "ok"
+        try:
+            from extensions.research.web_search import _playwright_page
+
+            with _playwright_page():
+                pass
+        except Exception as _e:
+            web_search_browser = f"{type(_e).__name__}: {_e}"[:300]
+
         # The Stable-Diffusion stack imports these lazily; a frozen build that missed them fails
         # every image generation, so surface it here (the build's smoke test checks this).
         image_imports = "ok"
@@ -472,25 +494,70 @@ if os.environ.get("LOMA_SELFTEST") == "1":
         # dropped a lazily-loaded package only fails when a user reaches that feature; this
         # makes the build (and the Windows e2e) fail instead.
         import importlib
+        import importlib.metadata
 
-        deps_missing: dict[str, str] = {}
-        for _mod in (
+        _tracked_deps = (
             "pymupdf", "pypdf", "docx", "pptx", "xlsxwriter", "mammoth", "markdown", "openpyxl", "lxml",
             "pandas", "matplotlib", "PIL", "playwright", "trafilatura", "tiktoken", "rank_bm25", "pydub",
             "imageio_ffmpeg", "opencc", "msoffcrypto", "chromadb", "langchain_chroma", "langchain_core",
             "sentence_transformers", "torch", "torchaudio", "torchvision",
             "faster_whisper", "funasr", "piper", "diffusers", "accelerate", "safetensors", "peft",
             "gguf", "cv2", "rembg", "psutil", "yaml", "ollama",
-        ):
+        )
+        deps_missing: dict[str, str] = {}
+        for _mod in _tracked_deps:
             try:
                 importlib.import_module(_mod)
             except Exception as _e:
                 deps_missing[_mod] = f"{type(_e).__name__}: {_e}"[:160]
+
+        # A module can import fine while still being "unavailable" to the libraries that
+        # use it: transformers/diffusers/accelerate/peft (and, as of the gguf incident
+        # below, gguf too) each gate a feature on importlib.metadata.version(dist_name)
+        # succeeding, NOT on the plain import above — and PyInstaller bundles a package's
+        # importable code without its .dist-info metadata unless copy_metadata(...) was
+        # added for it in the spec. That gap shipped a build where `import gguf` worked
+        # but diffusers' is_gguf_available() still returned False, so every FLUX Klein
+        # GGUF generation failed with a misleading generic checkpoint-parsing error
+        # instead of the real "gguf not available" one — and the deps_missing loop above
+        # didn't catch it, because a bare import was all it ever checked.
+        #
+        # Rather than special-case gguf (or whichever package trips this next), replicate
+        # the SAME lookup diffusers/transformers do internally for every tracked
+        # dependency at once: resolve each import name to its real distribution name via
+        # importlib.metadata.packages_distributions() (falling back to the import name
+        # itself, since some packages' distribution name matches it exactly) and confirm
+        # the version lookup succeeds. This is what the build's smoke-test asserts is
+        # empty — see build.yml — so a future package hitting this same gap fails the
+        # build instead of being found by a user.
+        metadata_missing: dict[str, str] = {}
+        try:
+            pkg_dist_map = importlib.metadata.packages_distributions()
+        except Exception:
+            pkg_dist_map = {}
+        for _mod in _tracked_deps:
+            if _mod in deps_missing:
+                continue  # already reported as a straight import failure above
+            candidates = pkg_dist_map.get(_mod) or [_mod]
+            ok = False
+            last_err = ""
+            for _dist in candidates:
+                try:
+                    importlib.metadata.version(_dist)
+                    ok = True
+                    break
+                except Exception as _e:
+                    last_err = f"{type(_e).__name__}: {_e}"
+            if not ok:
+                metadata_missing[_mod] = last_err[:160]
+
         return {
             "online": conn.online,
             "reason": conn.reason,
             "image_imports": image_imports,
             "deps_missing": deps_missing,
+            "metadata_missing": metadata_missing,
+            "web_search_browser": web_search_browser,
         }
 
 

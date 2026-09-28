@@ -88,6 +88,69 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm --clean packaging/loma_extended.spec
 
+      # Windows had NO smoke-test at all before this — only macOS's build job called
+      # /loma-selftest. That's exactly how the gguf metadata bug (see main.py's
+      # metadata_missing check and DESKTOP_APP_LESSONS.md) shipped in a Windows .exe
+      # undetected: nothing here ever ran the app and asked it whether its own
+      # dependencies were actually usable, only whether PyInstaller finished without
+      # erroring. Mirrors build-macos's smoke-test (no code-signing step here, so no
+      # need to test a disposable copy the way macOS does).
+      - name: Smoke-test the built app
+        shell: bash
+        run: |
+          export LOMA_PORT=8765
+          export LOMA_BROWSER_OPENED=1
+          export LOMA_SELFTEST=1
+          "dist/LOMA Extended Edition/LOMA Extended Edition.exe" &
+          APP_PID=$!
+          ok=0
+          for i in $(seq 1 60); do
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "app process exited early"
+              exit 1
+            fi
+            if curl -sf "http://127.0.0.1:$LOMA_PORT/" >/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          selftest=""
+          if [ "$ok" = "1" ]; then
+            selftest=$(curl -s --max-time 150 "http://127.0.0.1:$LOMA_PORT/loma-selftest" || true)
+            echo "selftest response: $selftest"
+          fi
+          kill $APP_PID 2>/dev/null || true
+          taskkill //F //IM "LOMA Extended Edition.exe" 2>/dev/null || true
+          if [ "$ok" != "1" ]; then
+            echo "app did not respond on http://127.0.0.1:$LOMA_PORT/ within 60s"
+            exit 1
+          fi
+          case "$selftest" in
+            *'"online":true'*) ;;
+            *) echo "frozen app could not make a verified HTTPS request: $selftest"; exit 1 ;;
+          esac
+          case "$selftest" in
+            *'"image_imports":"ok'*) ;;
+            *) echo "frozen app cannot import the image-generation libraries: $selftest"; exit 1 ;;
+          esac
+          case "$selftest" in
+            *'"deps_missing":{}'*) ;;
+            *) echo "frozen app is missing bundled dependencies: $selftest"; exit 1 ;;
+          esac
+          case "$selftest" in
+            *'"metadata_missing":{}'*) ;;
+            *) echo "frozen app is missing package metadata for a bundled dependency: $selftest"; exit 1 ;;
+          esac
+          # Windows ships Edge by default (real user machines and this runner both have
+          # it), so web search's Playwright launch is expected to work here — unlike
+          # macOS, where no browser is guaranteed to exist (see build-macos's smoke-test
+          # for why that one only logs this instead of failing on it).
+          case "$selftest" in
+            *'"web_search_browser":"ok"'*) ;;
+            *) echo "frozen app cannot launch a browser for web search: $selftest"; exit 1 ;;
+          esac
+
       - name: Add LICENSE, README, and user guides to the dist folder
         shell: bash
         run: |
@@ -272,6 +335,27 @@ jobs:
           case "$selftest" in
             *'"deps_missing":{}'*) ;;
             *) echo "frozen app is missing bundled dependencies: $selftest"; exit 1 ;;
+          esac
+          # A package can import fine while still being "unavailable" to the libraries
+          # that use it (transformers/diffusers/accelerate/peft/gguf all gate a feature
+          # on importlib.metadata.version() succeeding, not on a plain import) — this
+          # bit LOMA once already (gguf's .dist-info wasn't bundled, so FLUX Klein GGUF
+          # generation failed in the shipped .exe with deps_missing empty the whole
+          # time). See main.py's /loma-selftest metadata_missing check.
+          case "$selftest" in
+            *'"metadata_missing":{}'*) ;;
+            *) echo "frozen app is missing package metadata for a bundled dependency: $selftest"; exit 1 ;;
+          esac
+          # NOT asserted here (unlike build-windows) — web search's Playwright launch
+          # tries the system's installed Edge/Chrome first (see _playwright_page() in
+          # extensions/research/web_search.py) and this Mac runner, like a real user's
+          # Mac without Chrome installed, has neither. This is a genuine known gap for
+          # macOS (search likely doesn't work there yet without a bundled browser or a
+          # Chrome-installed check surfaced to the user), logged for visibility rather
+          # than failing every Mac build until that's solved separately.
+          case "$selftest" in
+            *'"web_search_browser":"ok"'*) echo "web search browser: ok" ;;
+            *) echo "web search browser NOT available on this Mac runner (expected without Chrome installed): $selftest" ;;
           esac
 
       - name: Add LICENSE, README, and user guides alongside the .app

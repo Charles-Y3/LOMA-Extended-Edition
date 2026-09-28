@@ -19,28 +19,43 @@ import re
 
 from services.image_generation import GENERATED_IMAGE_DIR, ImageGenerationResult, unique_output_path
 
-_CHART_AUTHOR_SYSTEM = """You are LOMA's Chart Author. Return ONLY valid JSON (no markdown fences).
+# See services/infographic_generation.py's matching _INSUFFICIENT_DATA_INSTRUCTION
+# for why this exists — a search is now only attempted for content that matches a
+# live-fact/explicit-search pattern (pipeline/base/grounding.py), not for every
+# chart unconditionally, so most chart requests reaching here without grounding
+# material are things the model can chart from its own general knowledge (e.g. a
+# well-known historical trend) rather than something needing live verification.
+_INSUFFICIENT_DATA_INSTRUCTION = """
+If grounding material is given below, use ONLY real figures from it — every value
+must be directly supported by it. Never invent, estimate, round, or extrapolate a
+number that isn't stated there.
+If NO grounding material is given: chart it from your own general knowledge if
+this is well-established data (a well-known historical trend or comparison). But
+if the request specifically needs current, recent, or otherwise verifiable
+figures you are not confident you know accurately, do not guess or invent —
+instead return exactly {"insufficient_data": true} and nothing else.
+"""
+
+_CHART_AUTHOR_SYSTEM = f"""You are LOMA's Chart Author. Return ONLY valid JSON (no markdown fences).
 
 Given the user's chart/graph/plot request, produce:
-{
+{{
   "title": "short chart title, in the SAME language as the user's request",
   "chart_type": "bar" | "line" | "pie",
   "x_label": "x-axis label, or empty string if not applicable (e.g. pie charts)",
   "y_label": "y-axis label, or empty string if not applicable",
   "series": [
-    {"label": "short category/point label", "value": <number>}
+    {{"label": "short category/point label", "value": <number>}}
   ]
-}
+}}
 
 Rules:
-- 3 to 12 data points. Use ONLY real figures from the grounding material given
-  below — every value must be directly supported by it. Never invent, estimate,
-  round, or extrapolate a number that isn't stated there.
+- 3 to 12 data points.
 - chart_type: "line" for a trend over time/an ordered sequence, "bar" for
   comparing discrete categories, "pie" for parts of a whole (values should
   roughly sum to a meaningful total, e.g. percentages).
 - title/labels must be in the user's own language, not translated to English.
-"""
+{_INSUFFICIENT_DATA_INSTRUCTION}"""
 
 
 def _parse_json(raw: str) -> dict | None:
@@ -117,13 +132,6 @@ def _looks_synthetic_sequence(series: list[dict]) -> bool:
 
 
 def _author_chart(user_query: str, prof: dict, model: str, context: str = "") -> dict:
-    if not (context or "").strip():
-        # No attached-source excerpt or web search result to draw real numbers from
-        # — refuse rather than let the model invent a plausible-looking series (see
-        # marker_visual._try_chart's caller, which falls back to a plain qualitative
-        # photo on any exception here instead of rendering fabricated data).
-        raise ValueError("No grounding material available — refusing to fabricate chart data.")
-
     from pipeline.capability_runtime.chat_runner import generate_text_sync
 
     user_content = user_query
@@ -142,6 +150,32 @@ def _author_chart(user_query: str, prof: dict, model: str, context: str = "") ->
         disable_thinking=True,
     )
     data = _parse_json(raw) or {}
+    if data.get("insufficient_data"):
+        # The author model itself judged this needs current/verifiable figures it
+        # isn't confident about, and none were available to ground it in — refuse
+        # rather than let it invent a plausible-looking series (see
+        # marker_visual._try_chart's caller, which falls back to a plain
+        # qualitative photo on any exception here instead of rendering fabricated
+        # data). Decided per-request by the model now, not by a blanket "no
+        # context means refuse" rule that used to fire even for well-established
+        # historical data.
+        #
+        # KNOWN LIMITATION (accepted 2026-09, not yet fixed): this self-flag is only
+        # as reliable as the model's own uncertainty calibration. Verified live
+        # against real installed Ollama models — a 9B model correctly self-refused
+        # a genuinely time-sensitive, ungrounded chart request ("current unemployment
+        # rate by state"), but a 2B model fabricated a full plausible-looking table
+        # instead of flagging insufficient_data. Small local models are known to be
+        # poorly calibrated about their own knowledge gaps (confident guessing over
+        # admitting uncertainty), so this mechanism can silently under-refuse on
+        # smaller models — reopening, for that specific combination (query matches a
+        # live-fact pattern AND no grounding material was found AND the model stayed
+        # silent), the exact fabrication risk the old blanket refuse-if-no-context
+        # rule existed to prevent. Deliberately left as-is for now rather than adding
+        # a secondary heuristic gate for that combination — revisit if this keeps
+        # surfacing as local models improve, or if a report of a fabricated
+        # ungrounded chart/timeline/infographic comes in.
+        raise ValueError("No grounding material available — refusing to fabricate chart data.")
     series = []
     for pt in (data.get("series") or [])[:12]:
         if not isinstance(pt, dict):
@@ -164,7 +198,11 @@ def _author_chart(user_query: str, prof: dict, model: str, context: str = "") ->
         raise ValueError(
             "Authored series is a perfectly arithmetic sequence — refusing as likely fabricated rather than transcribed."
         )
-    if not _values_supported_by_context(series, context):
+    # Only checked when real grounding material was actually given — with none
+    # (general-knowledge answer, already vetted by the insufficient_data check
+    # above), there's nothing for a value to trace to, so this would otherwise
+    # reject every ungrounded-but-legitimate answer.
+    if context and not _values_supported_by_context(series, context):
         raise ValueError(
             "Authored chart values don't trace to any real number in the grounding material — "
             "refusing to fabricate chart data."

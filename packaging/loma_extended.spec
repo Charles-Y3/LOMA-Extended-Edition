@@ -65,6 +65,24 @@ _pip_dir = str(Path(pip.__file__).parent)
 # toolchain this frozen build never has, which broke funasr's sdist-only dependency jieba).
 _funasr_collect = collect_all('funasr')
 
+# Playwright (extensions/research/web_search.py's Google/Bing scraping for web grounding)
+# needs its own ~106MB Node.js "driver" (playwright/driver/node[.exe] + driver/package/*.js)
+# to launch ANY browser at all, even one it doesn't download itself — it launches the
+# system's installed Edge/Chrome via `channel=` first (see _playwright_page()), so no
+# browser binaries need bundling, but the driver that SPAWNS those browsers is not
+# Python code and Analysis never traced it: playwright/_impl/_driver.py resolves it as
+# Path(inspect.getfile(playwright)).parent / "driver", a plain on-disk lookup relative
+# to the installed package, exactly the kind of non-import resource collect_all() exists
+# for. Without this, every web search silently returned zero results in the shipped
+# .exe — no error surfaced anywhere, because _google_search_on_page()/_bing_search_on_page()
+# each catch the failed browser launch and just log it. Confirmed via a real user report:
+# a toggled-on "search the internet"/chart/infographic request always got "no grounding
+# material" with the toggle on, in a build where deps_missing was empty the whole time
+# (see the gguf metadata lesson above — same shape, different bug: gguf's Python module
+# imported fine but its metadata was missing; here playwright's Python module imports
+# fine but its data/driver directory is missing).
+_playwright_collect = collect_all('playwright')
+
 # trafilatura.settings.use_config() reads settings.cfg relative to its own package
 # __file__ at runtime — a non-Python resource Analysis won't bundle on its own.
 _trafilatura_cfg = Path(trafilatura.__file__).parent / 'settings.cfg'
@@ -141,6 +159,12 @@ _tv_collect = collect_all('torchvision')
 binaries += _tv_collect[1]
 datas += _tv_collect[0]
 hiddenimports_funasr = _funasr_collect[2]
+# node.exe/node itself is a plain executable invoked via subprocess (not a shared library
+# PyInstaller needs to scan for dependencies), so it travels fine as data alongside the
+# driver's JS files rather than needing the `binaries` list.
+datas += _playwright_collect[0]
+binaries += _playwright_collect[1]
+hiddenimports_playwright = _playwright_collect[2]
 
 # transformers checks its dependencies' installed versions at runtime via
 # importlib.metadata — PyInstaller bundles a package's importable code but NOT its
@@ -149,12 +173,20 @@ hiddenimports_funasr = _funasr_collect[2]
 datas += copy_metadata('transformers', recursive=True)
 datas += copy_metadata('tokenizers')
 datas += copy_metadata('sentence-transformers', recursive=True)
-# diffusers/accelerate/peft do the same importlib.metadata version-check dance — Extended
-# actually reaches this code path (Core's spec never needed this, since it excludes the
-# whole image-gen stack).
+# diffusers/accelerate/peft/gguf do the same importlib.metadata version-check dance —
+# Extended actually reaches this code path (Core's spec never needed this, since it
+# excludes the whole image-gen stack). gguf specifically gates the FLUX Klein GGUF
+# loader (services/image_generation.py's _build_flux_klein_components): without this,
+# diffusers' is_gguf_available() reports False even though the module imports fine
+# (PyInstaller bundles the code but not the .dist-info importlib.metadata reads), and
+# GGUF loading fails with a misleading generic "Unable to load weights from checkpoint
+# file" instead of the real "gguf not available" error. See main.py's /loma-selftest
+# metadata_missing check (and DESKTOP_APP_LESSONS.md) for how this whole bug class is
+# now caught for every tracked dependency, not just the ones already hit by a user.
 datas += copy_metadata('diffusers', recursive=True)
 datas += copy_metadata('accelerate')
 datas += copy_metadata('peft')
+datas += copy_metadata('gguf')
 # transformers 5.x builds each model's lazy export table by REGEX-SCANNING the package's .py SOURCE
 # files at runtime (define_import_structure). PyInstaller ships only compiled code, so the table came
 # out empty and `from transformers import CLIPImageProcessor` failed. Ship the .py sources of the
@@ -282,6 +314,7 @@ if sys.platform == 'win32':
 
 hiddenimports += hiddenimports_funasr
 hiddenimports += _tv_collect[2]
+hiddenimports += hiddenimports_playwright
 # rembg (background removal for image edits) reads pymatting's/onnxruntime's package metadata on import
 # and pulls its submodules lazily -> "No package metadata was found for pymatting" when frozen.
 datas += copy_metadata('rembg', recursive=True)

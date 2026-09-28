@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import json
 import re
 import urllib.parse
@@ -224,6 +225,58 @@ def _bing_search_on_page(page: Any, query: str, *, max_results: int = 5) -> list
     return out
 
 
+_BING_RESULT_RE = re.compile(
+    r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S
+)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _bing_search_via_http(query: str, *, max_results: int = 5) -> list[dict[str, str]]:
+    """Plain HTTP GET against Bing's HTML results page — no browser at all, tried
+    before the Playwright-driven scrape (see _browser_search_batch). Bing still
+    server-renders real results to a bare HTTP client (confirmed by reading the raw
+    response — same <h2><a href=...> shape, same bing.com/ck/a redirect links
+    _unwrap_bing_url already handles), so this is often enough on its own: faster
+    than launching a browser, works even where no browser is installed at all (the
+    macOS gap noted in DESKTOP_APP_LESSONS.md — Playwright's channel="msedge"/"chrome"
+    fallback has nothing to fall back to there), and doesn't depend on the Playwright
+    driver being bundled correctly either. Not guaranteed — Bing can still serve a
+    different/blocked page to a bare client — so an empty result here just means the
+    caller tries the browser path next, same as a failed browser search does today."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    url = _BING_SEARCH + "?" + urllib.parse.urlencode({"q": q})
+    allowed, reason = check_research_request(url, kind="search_discovery")
+    if not allowed:
+        _log(f"Research search: Bing (HTTP) blocked — {reason}")
+        return []
+    req = urllib.request.Request(
+        url, headers={"User-Agent": user_agent(), "Accept-Language": "en-US,en;q=0.9"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html_text = resp.read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        _log(f"Research search: Bing (HTTP) failed ({exc})")
+        return []
+
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for m in _BING_RESULT_RE.finditer(html_text):
+        href = html.unescape(m.group(1))
+        title = html.unescape(_TAG_RE.sub("", m.group(2))).strip()
+        if not title or href in seen:
+            continue
+        seen.add(href)
+        hit = _normalize_hit(title, href)
+        if hit["url"].startswith("http") and is_allowed_source_url(hit["url"]):
+            out.append(hit)
+        if len(out) >= max_results:
+            break
+    return out
+
+
 def _wiki_api(params: dict[str, str]) -> dict[str, Any]:
     url = _WIKI_API + "?" + urllib.parse.urlencode({**params, "format": "json"})
     allowed, reason = check_research_request(url, kind="wikipedia_api")
@@ -312,11 +365,28 @@ def _browser_search_batch(
     max_per_query: int,
     log_fn=None,
 ) -> list[dict[str, str]]:
-    """Browser SERP discovery (Bing, then Google) when HTTP search returns no usable links."""
+    """SERP discovery: plain HTTP Bing first (no browser needed at all — see
+    _bing_search_via_http), then browser-driven Bing, then browser-driven Google as
+    successive fallbacks, per query. Only queries the cheap HTTP attempt missed ever
+    pay for a browser launch — most queries that reach this function should resolve
+    without one now."""
     hits: list[dict[str, str]] = []
+    remaining: list[str] = []
+    for q in queries[:5]:
+        if log_fn:
+            log_fn(f"Searching (Bing): {q}")
+        batch = _bing_search_via_http(q, max_results=max_per_query)
+        if batch:
+            hits.extend(batch)
+        else:
+            remaining.append(q)
+
+    if not remaining:
+        return hits
+
     try:
         with _playwright_page() as page:
-            for q in queries[:5]:
+            for q in remaining:
                 if log_fn:
                     log_fn(f"Searching (browser Bing): {q}")
                 batch = _bing_search_on_page(page, q, max_results=max_per_query)

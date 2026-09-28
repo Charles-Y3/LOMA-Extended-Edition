@@ -134,10 +134,13 @@ def resolve_marker_visual(
         # pipeline/query_intent_i18n.py's *_broad_keywords concepts) also falls
         # straight through, unchanged.
         if intent in ("diagram", "infographic_stat", "infographic_timeline", "infographic_comparison", "chart"):
-            broad_trigger = intent != "diagram"
+            # Whether to search is now decided by the query's own content
+            # (pipeline/base/grounding.py's matches_live_fact_pattern), not by which
+            # of these five types was requested — a diagram and a chart about the
+            # same evergreen topic behave identically now, as do a diagram and a
+            # chart about the same time-sensitive one.
             context, sources = _resolve_context(
-                (topic_text or prompt).strip(), bundle, source_text, settings,
-                broad_trigger=broad_trigger, log_fn=log_fn,
+                (topic_text or prompt).strip(), bundle, source_text, settings, log_fn=log_fn,
             )
             if intent == "diagram":
                 path = _try_diagram(prompt, output_path, prof, model, log_fn, context)
@@ -164,14 +167,13 @@ def resolve_marker_visual(
 
 
 def _resolve_context(
-    prompt: str, bundle, source_text: str, settings: dict | None, *, broad_trigger: bool, log_fn
+    prompt: str, bundle, source_text: str, settings: dict | None, *, log_fn
 ) -> tuple[str, list[dict[str, str]]]:
     try:
         from pipeline.base.grounding import resolve_generation_context
 
         return resolve_generation_context(
-            prompt, bundle=bundle, source_text=source_text, settings=settings,
-            broad_trigger=broad_trigger, log_fn=log_fn,
+            prompt, bundle=bundle, source_text=source_text, settings=settings, log_fn=log_fn,
         )
     except Exception as ex:
         if log_fn:

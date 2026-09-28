@@ -416,6 +416,48 @@ CONCEPTS: dict[str, dict[str, tuple[str, ...]]] = {
             "öffnungszeiten", "oeffnungszeiten", "wechselkurs", "auf lager",
         ),
     },
+    # An explicit instruction to search the web, independent of topic — "search the
+    # internet for X" should trigger grounding even when X itself isn't one of
+    # live_grounding_patterns' fixed categories (weather/price/sports/news/etc.).
+    # Phrases are literal substrings (see matches()), so each covers one common
+    # wording rather than a single flexible pattern — English also has a real regex
+    # in services/grounded_chat.py's _EXPLICIT_SEARCH_EN for wording this list can't
+    # anticipate; the other locales rely on this phrase list alone, so keep it broad.
+    "explicit_search_request": {
+        "en": (
+            "search the internet", "search internet", "search the net", "search net",
+            "search the web", "search web", "search online", "search on the web",
+            "search on google", "search on the internet", "internet search",
+            "web search", "look it up online", "look this up online",
+            "look that up online", "look up online", "look online", "check online",
+            "find online", "find this online", "google it", "google this",
+            "google that", "browse the internet", "browse the web",
+        ),
+        "zh_tw": (
+            "搜尋網路", "搜索网路", "搜尋網際網路", "上網搜尋", "上網搜索", "上網查", "在網上搜尋",
+            "在網路上搜尋", "查一下網路", "google一下", "google搜尋", "谷歌一下", "網路搜尋一下",
+            "幫我查網路", "幫我上網查",
+        ),
+        "zh_cn": (
+            "搜索网络", "搜索互联网", "上网搜索", "上网查", "在网上搜索", "在网络上搜索",
+            "查一下网络", "google一下", "google搜索", "谷歌一下", "网络搜索一下",
+            "帮我查网络", "帮我上网查",
+        ),
+        "es": (
+            "busca en internet", "buscar en internet", "busca en la red",
+            "buscar en la red", "busca en la web", "buscar en la web",
+            "busca en línea", "busca en linea", "buscar en línea", "buscar en linea",
+            "búscalo en internet", "buscalo en internet", "búscalo en línea",
+            "buscalo en linea", "búsquedalo en google", "búscalo en google",
+            "buscalo en google",
+        ),
+        "de": (
+            "durchsuche das internet", "suche im internet", "im internet suchen",
+            "im internet nachschauen", "such das im internet", "suche im netz",
+            "im netz suchen", "suche im web", "im web suchen", "online suchen",
+            "such das online", "google es", "google das", "im internet nachsehen",
+        ),
+    },
     "static_fact_patterns": {
         "en": ("highest mountain", "tallest mountain", "capital of", "who invented", "who discovered", "who wrote", "speed of light"),
         "zh_tw": ("最高的山", "首都", "誰發明了", "誰發現了", "誰寫的", "光速"),

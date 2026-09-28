@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
 """Quick web grounding for general chat (weather, local info, current events).
 
-When web grounding is ON, search runs ONLY for clear live-fact queries:
+When web grounding is ON, search runs for clear live-fact queries, OR whenever the
+user explicitly told LOMA to search the internet (any topic):
 
   YES — current weather, prices, news, scores, exchange rates, "latest …",
-        "what is the temperature in …", short factual lookups.
+        "what is the temperature in …", short factual lookups; ALSO any message
+        that explicitly says to search the internet/web/online, regardless of
+        topic ("search the internet about X" always searches for X, even when X
+        isn't itself one of the live-fact categories above).
 
   NO  — stories, poems, creative writing, pasted narratives, chat/tasks
         (translate, summarize, rewrite), opinions, coding help, greetings,
-        or any message without explicit live-world keywords.
+        or any message without explicit live-world keywords AND without an
+        explicit instruction to search.
 """
 from __future__ import annotations
 
@@ -118,6 +123,24 @@ _EXPLICIT_LIVE_EN = re.compile(
 _MAX_GROUNDING_QUERY = 2000
 _NARRATIVE_MIN_LEN = 260
 
+# An explicit instruction to search the web wins outright, regardless of topic —
+# see needs_web_grounding(). Real regex (not a fixed phrase list) so it covers
+# "search the internet/web/online", either word order ("internet search"), "look
+# it/this/that up online", and "google it/this/that" without listing every
+# combination; pipeline/query_intent_i18n.py's explicit_search_request concept
+# (via _OrConceptRE below) gives the other 4 locales their own phrase coverage.
+# "net" is deliberately paired only with "search" (not look/check/find/browse) —
+# those verbs + "net" produce real false positives ("look at the net profit",
+# "find the net income"), whereas "search net"/"search the net" is a set phrase
+# for the internet and nothing else.
+_EXPLICIT_SEARCH_EN = re.compile(
+    r"\b(?:search|look|check|browse|find)\b[\w\s]{0,20}\b(?:internet|web|online)\b"
+    r"|\bsearch\b[\w\s]{0,10}\bnet\b"
+    r"|\b(?:internet|web|online|net)\b[\w\s]{0,15}\bsearch\b"
+    r"|\bgoogle\s+(?:it|this|that)\b",
+    re.I,
+)
+
 _WEATHER_PATTERNS_EN = re.compile(
     r"\b(weather|forecast|temperature|rain(?:ing)?|snow|humidity|feels like)\b",
     re.I,
@@ -168,6 +191,7 @@ class _OrConceptRE:
 
 
 _LIVE_PATTERNS = _OrConceptRE(_LIVE_PATTERNS_EN, ("live_grounding_patterns",))
+_EXPLICIT_SEARCH = _OrConceptRE(_EXPLICIT_SEARCH_EN, ("explicit_search_request",))
 _STATIC_FACT = _OrConceptRE(_STATIC_FACT_EN, ("static_fact_patterns",))
 _QUESTION_START = _OrConceptRE(_QUESTION_START_EN, ("question_start_words",))
 _TASK_VERBS = _OrConceptRE(_TASK_VERBS_EN, _TASK_VERB_CONCEPTS)
@@ -234,6 +258,8 @@ def grounding_skip_reason(query: str) -> str | None:
         return "empty message"
     if _GREETING_ONLY.match(q):
         return "greeting"
+    if _EXPLICIT_SEARCH.search(q):
+        return None  # explicit "search the internet/web" wins outright — see needs_web_grounding()
     if _STATIC_FACT.search(q):
         return "timeless factual question — no live web data needed"
     if _SKIP_GROUNDING.search(q):
@@ -248,13 +274,46 @@ def grounding_skip_reason(query: str) -> str | None:
 
 
 def needs_web_grounding(query: str) -> bool:
-    """True only when the message clearly needs current public-web facts."""
+    """True when the message clearly needs current public-web facts, OR the user
+    explicitly told LOMA to search the internet — an explicit request wins outright
+    regardless of topic (and regardless of the task-verb/creative-writing/pasted-
+    narrative skips below), since the user has already said what they want. Without
+    this, "search the internet about X" only worked when X itself happened to match
+    one of the fixed live-fact categories (weather/price/sports/news/etc.), so an
+    explicit ask for a topic like "AI usage trends" silently never searched even
+    with the toggle on — the model then answered from its own knowledge and, with
+    no search context to work from, said it had no live access, which read like the
+    toggle wasn't working at all."""
     q = (query or "").strip()
     if not q or len(q) > _MAX_GROUNDING_QUERY:
         return False
+    if _GREETING_ONLY.match(q):
+        return False
+    if _EXPLICIT_SEARCH.search(q):
+        return True
     if _should_skip_grounding(q):
         return False
     return bool(_EXPLICIT_LIVE.search(q) or _LIVE_PATTERNS.search(q))
+
+
+def matches_live_fact_pattern(query: str) -> bool:
+    """Same live-fact/explicit-search keyword match as needs_web_grounding(), but
+    WITHOUT its task-verb and creative-writing skips — those exist to keep chat's
+    own "write me X" / "translate this" requests from wastefully triggering a
+    search, but a report-shaped request (chart/diagram/infographic/document/
+    presentation) is *always* phrased as a task ("create a chart of...", "write a
+    report on...") by nature, so that exclusion would skip essentially every one of
+    them. Used by pipeline/base/grounding.py as the single content-based signal for
+    whether to attempt a search at all, replacing the old per-content-type
+    broad_trigger flag (a chart about "quitting procrastination" and a chart about
+    "today's exchange rate" used to get identical treatment purely because both are
+    charts — this checks what the query actually asks for instead)."""
+    q = (query or "").strip()
+    if not q or len(q) > _MAX_GROUNDING_QUERY:
+        return False
+    if _GREETING_ONLY.match(q):
+        return False
+    return bool(_EXPLICIT_SEARCH.search(q) or _EXPLICIT_LIVE.search(q) or _LIVE_PATTERNS.search(q))
 
 
 def should_use_grounded_chat(
@@ -445,16 +504,15 @@ def gather_grounded_context(
     query: str,
     *,
     log_fn: Callable[[str], None] | None = None,
-    topic_relevance: bool = False,
+    topic_relevance: bool = True,
 ) -> tuple[str, list[dict[str, str]]]:
     """
     Search the web, fetch a few pages, return (context_block, sources).
     Only public http(s) URLs from search results are fetched.
 
-    `topic_relevance=True` (used by report-shaped grounding — charts/diagrams/
-    infographics/presentations, see pipeline/base/grounding.py) turns on two
-    mechanical, no-extra-LLM-call filters that plain chat grounding doesn't
-    need: a lenient domain-credibility gate (drops personal blogs/forums and
+    `topic_relevance=True` (the default — every caller wants this, plain chat
+    included; see 2026-09 fix notes) turns on two mechanical, no-extra-LLM-call
+    filters: a lenient domain-credibility gate (drops personal blogs/forums and
     obvious non-data sources like presentation-template marketplaces before
     they're even fetched — see pipeline/base/source_relevance.py) and
     sentence-level relevance extraction (a fetched page is usually mostly
@@ -497,7 +555,13 @@ def gather_grounded_context(
         queries,
         max_per_query=5,
         log_fn=log,
-        allow_wikipedia=False,
+        # Wikipedia only kicks in as search_web_batch's own supplement when Bing/Google
+        # come up short (see its docstring) — previously disabled here specifically, so
+        # a search-engine block/CAPTCHA left chat/chart/infographic grounding with zero
+        # fallback at all (unlike Research, which always allowed it). Enabled now so a
+        # topic Wikipedia actually covers well (a history timeline, a well-known
+        # concept) still grounds instead of refusing outright.
+        allow_wikipedia=True,
     )
     safe_hits = [h for h in hits if is_url_safe(h.get("url") or "")]
     if topic_relevance and safe_hits:

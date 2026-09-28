@@ -21,6 +21,27 @@ from services.image_generation import GENERATED_IMAGE_DIR, ImageGenerationResult
 _SCALE = 3
 _ICON_NAMES_HINT = ", ".join(ICON_NAMES)
 
+# Shared escape hatch for when no grounding material was attached/found (see
+# pipeline/base/grounding.py — a search is now only attempted for content that
+# matches a live-fact/explicit-search pattern, not for every chart/infographic/
+# timeline unconditionally): most requests reaching this without grounding
+# material are evergreen/well-established topics the model can answer directly
+# from its own knowledge (a history timeline, a well-known comparison) — only
+# refuse when the request specifically needs current/recent/verifiable facts the
+# model isn't confident it knows accurately. This replaces a blanket "no context
+# means refuse" rule that treated every infographic/chart as needing live
+# verification regardless of what it was actually about.
+_INSUFFICIENT_DATA_INSTRUCTION = """
+If grounding material is given below, use ONLY it for every fact/number/date —
+never state one that isn't supported by it.
+If NO grounding material is given: answer from your own general knowledge if this
+is a well-established topic (history, science, well-known facts/comparisons). But
+if the request specifically needs current, recent, or otherwise verifiable facts
+you are not confident you know accurately (e.g. today's data, this year's
+statistics, a very recent event), do not guess or invent — instead return exactly
+{"insufficient_data": true} and nothing else.
+"""
+
 _STAT_GRID_AUTHOR_SYSTEM = f"""You are LOMA's Stat Grid Author. Return ONLY valid JSON (no markdown fences).
 
 Given the user's "key facts / stats / quick facts" infographic request, produce:
@@ -32,53 +53,46 @@ Given the user's "key facts / stats / quick facts" infographic request, produce:
 }}
 
 Rules:
-- 3 to 6 cards. Use ONLY facts/numbers directly supported by the grounding
-  material given below — never invent, estimate, or round a stat that isn't
-  stated there.
+- 3 to 6 cards.
 - icon must be exactly one of the listed names — pick the closest match, never a
   name outside that list.
 - stat/label must be in the user's own language, not translated to English.
-"""
+{_INSUFFICIENT_DATA_INSTRUCTION}"""
 
-_TIMELINE_AUTHOR_SYSTEM = """You are LOMA's Timeline Author. Return ONLY valid JSON (no markdown fences).
+_TIMELINE_AUTHOR_SYSTEM = f"""You are LOMA's Timeline Author. Return ONLY valid JSON (no markdown fences).
 
 Given the user's "timeline / history / milestones" infographic request, produce:
-{
+{{
   "title": "short title, in the SAME language as the user's request",
   "events": [
-    {"date": "short date/label (e.g. a year, or a phase name)", "title": "short event title", "description": "one short phrase, optional"}
+    {{"date": "short date/label (e.g. a year, or a phase name)", "title": "short event title", "description": "one short phrase, optional"}}
   ]
-}
+}}
 
 Rules:
 - 3 to 7 events, in chronological order.
 - date/title/description must be in the user's own language, not translated to English.
-- Use ONLY events/dates directly supported by the grounding material given below —
-  never invent a date or event that isn't stated there.
-"""
+{_INSUFFICIENT_DATA_INSTRUCTION}"""
 
 
-_COMPARISON_AUTHOR_SYSTEM = """You are LOMA's Comparison Author. Return ONLY valid JSON (no markdown fences).
+_COMPARISON_AUTHOR_SYSTEM = f"""You are LOMA's Comparison Author. Return ONLY valid JSON (no markdown fences).
 
 Given the user's "compare X vs Y" infographic request, produce:
-{
+{{
   "title": "short title, in the SAME language as the user's request",
   "attributes": ["short attribute name", "..."],
   "items": [
-    {"name": "short item name", "values": ["value for attribute 1", "value for attribute 2", "..."]}
+    {{"name": "short item name", "values": ["value for attribute 1", "value for attribute 2", "..."]}}
   ]
-}
+}}
 
 Rules:
 - 2 to 4 items being compared, 3 to 6 attributes.
 - Every item's "values" list must have exactly one entry per attribute, in the
   same order as "attributes".
-- Use ONLY real figures/facts from the grounding material given below — every
-  value must be directly supported by it. Never invent, estimate, or round a
-  number or claim that isn't stated there.
 - title/attributes/values must be in the user's own language, not translated to
   English.
-"""
+{_INSUFFICIENT_DATA_INSTRUCTION}"""
 
 
 def _parse_json(raw: str) -> dict | None:
@@ -116,14 +130,6 @@ def _with_context(user_query: str, context: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _author_stat_grid(user_query: str, prof: dict, model: str, context: str = "") -> dict:
-    if not (context or "").strip():
-        # No attached-source excerpt or web search result to draw real stats from —
-        # refuse rather than let the model invent plausible-looking numbers (see
-        # marker_visual._try_infographic's caller, which falls back to a plain
-        # qualitative photo on any exception here instead of rendering fabricated
-        # facts). Mirrors _author_chart's / _author_comparison's same guarantee.
-        raise ValueError("No grounding material available — refusing to fabricate stat cards.")
-
     from pipeline.capability_runtime.chat_runner import generate_text_sync
 
     raw = generate_text_sync(
@@ -135,6 +141,20 @@ def _author_stat_grid(user_query: str, prof: dict, model: str, context: str = ""
         disable_thinking=True,
     )
     data = _parse_json(raw) or {}
+    if data.get("insufficient_data"):
+        # The author model itself judged this needs current/verifiable facts it
+        # isn't confident about, and none were available to ground it in — refuse
+        # rather than let it invent plausible-looking numbers (see
+        # marker_visual._try_infographic's caller, which falls back to a plain
+        # qualitative photo on any exception here instead of rendering fabricated
+        # facts). Mirrors _author_chart's / _author_comparison's same guarantee —
+        # but now decided per-request by the model, not by a blanket "no context
+        # means refuse" rule that used to fire even for well-established topics.
+        # KNOWN LIMITATION: only as reliable as the model's own uncertainty
+        # calibration — small local models can under-refuse here. See
+        # services/chart_generation.py's _author_chart for the verified example and
+        # full note; same limitation, same accepted-for-now decision, applies here.
+        raise ValueError("No grounding material available — refusing to fabricate stat cards.")
     cards = []
     for c in (data.get("cards") or [])[:6]:
         if not isinstance(c, dict):
@@ -259,9 +279,6 @@ def _render_stat_grid(title: str, cards: list[dict], theme, output_path: str) ->
 # ---------------------------------------------------------------------------
 
 def _author_timeline(user_query: str, prof: dict, model: str, context: str = "") -> dict:
-    if not (context or "").strip():
-        raise ValueError("No grounding material available — refusing to fabricate timeline events.")
-
     from pipeline.capability_runtime.chat_runner import generate_text_sync
 
     raw = generate_text_sync(
@@ -273,6 +290,11 @@ def _author_timeline(user_query: str, prof: dict, model: str, context: str = "")
         disable_thinking=True,
     )
     data = _parse_json(raw) or {}
+    if data.get("insufficient_data"):
+        # KNOWN LIMITATION — see _author_stat_grid above / chart_generation.py's
+        # _author_chart for the verified example: small local models can under-
+        # refuse here instead of flagging insufficient_data. Accepted for now.
+        raise ValueError("No grounding material available — refusing to fabricate timeline events.")
     events = []
     for e in (data.get("events") or [])[:7]:
         if not isinstance(e, dict):
@@ -435,9 +457,6 @@ def _render_timeline(title: str, events: list[dict], theme, output_path: str) ->
 # ---------------------------------------------------------------------------
 
 def _author_comparison(user_query: str, prof: dict, model: str, context: str = "") -> dict:
-    if not (context or "").strip():
-        raise ValueError("No grounding material available — refusing to fabricate comparison values.")
-
     from pipeline.capability_runtime.chat_runner import generate_text_sync
 
     raw = generate_text_sync(
@@ -449,6 +468,11 @@ def _author_comparison(user_query: str, prof: dict, model: str, context: str = "
         disable_thinking=True,
     )
     data = _parse_json(raw) or {}
+    if data.get("insufficient_data"):
+        # KNOWN LIMITATION — see _author_stat_grid above / chart_generation.py's
+        # _author_chart for the verified example: small local models can under-
+        # refuse here instead of flagging insufficient_data. Accepted for now.
+        raise ValueError("No grounding material available — refusing to fabricate comparison values.")
     attributes = [str(a).strip() for a in (data.get("attributes") or []) if str(a).strip()][:6]
     items = []
     for it in (data.get("items") or [])[:4]:

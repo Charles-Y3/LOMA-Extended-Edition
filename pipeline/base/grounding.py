@@ -9,9 +9,15 @@ own (unverified) knowledge, same as before this module existed.
 Reuses services/grounded_chat.py's real web-search machinery
 (gather_grounded_context) and settings gate (web_grounding_enabled) rather than
 reimplementing search — this module only adds the trigger policy needed for
-report-shaped generation (documents/presentations/infographics/posters), which is
-deliberately broader than chat's own needs_web_grounding() (see _should_use_web()
-docstring for why reusing that narrow chat heuristic verbatim doesn't work here)."""
+report-shaped generation (documents/presentations/diagrams/infographics/charts/
+posters): matches_live_fact_pattern(), the same live-fact/explicit-search keyword
+match chat uses minus its task-verb skip (see _should_use_web()'s docstring for
+why). This replaced a per-content-type broad_trigger flag (2026-09) that decided
+whether to search from *what kind* of visual was requested rather than *what it
+was actually about* — a chart and a diagram about the same evergreen topic used
+to get different treatment for no good reason, and a chart about a genuinely
+time-sensitive topic got the same mandatory treatment as one about nothing
+time-sensitive at all, purely because both were charts."""
 from __future__ import annotations
 
 from typing import Callable
@@ -31,15 +37,25 @@ def _source_excerpt(source_text: str, bundle) -> str:
     return text[:_SOURCE_EXCERPT_CHARS] if text else ""
 
 
-def _should_use_web(query: str, *, settings: dict | None, broad_trigger: bool) -> bool:
-    """Chat's needs_web_grounding() is tuned narrow (weather/prices/"latest"/"today"
-    phrasing) and explicitly excludes anything containing a task verb like "write"
-    or "create" — correct for chat (where a "write me X" request should go to the
-    planner, not web search) but wrong here, since a document/presentation request
-    is *always* phrased as a task ("write a report on...") and would never pass
-    that check. So report-shaped callers (broad_trigger=True) skip the phrasing
-    heuristic entirely and ground by default, excluding only genuinely creative/
-    fictional content — grounding a poem request would just waste a search."""
+def _should_use_web(query: str, *, settings: dict | None) -> bool:
+    """Whether to attempt a search at all, for any report-shaped caller (document/
+    presentation/diagram/infographic/chart/poster authoring). Content-based, not
+    type-based: uses matches_live_fact_pattern() — the same live-fact/explicit-
+    search keyword match chat uses, minus its task-verb skip (a report-shaped
+    request is always phrased as a task, "create a chart of X", so that skip would
+    exclude nearly everything here) — instead of the old per-content-type
+    broad_trigger flag, which decided "should this search" purely from *what kind*
+    of visual/document was requested rather than *what it's actually about*. A
+    chart about "quitting procrastination" no longer searches just because it's a
+    chart; a chart about "today's exchange rate" still does, because the query
+    itself says so.
+
+    This is deliberately only half the safety net, though — the OTHER half is each
+    author function's own "insufficient_data" self-check (see
+    services/infographic_generation.py / services/chart_generation.py), which lets
+    the authoring LLM itself refuse when it genuinely isn't confident, instead of
+    this upfront keyword match having to be perfect (it can't be: "weather 100
+    years ago" matches the same keywords as "weather right now")."""
     from services.grounded_chat import web_grounding_enabled
 
     if not web_grounding_enabled(settings):
@@ -50,12 +66,9 @@ def _should_use_web(query: str, *, settings: dict | None, broad_trigger: bool) -
     if matches(query, "creative_writing_skip"):
         return False
 
-    if broad_trigger:
-        return True
+    from services.grounded_chat import matches_live_fact_pattern
 
-    from services.grounded_chat import needs_web_grounding
-
-    return needs_web_grounding(query)
+    return matches_live_fact_pattern(query)
 
 
 def resolve_generation_context(
@@ -64,7 +77,6 @@ def resolve_generation_context(
     bundle=None,
     source_text: str = "",
     settings: dict | None = None,
-    broad_trigger: bool = False,
     log_fn: Callable[[str], None] | None = None,
 ) -> tuple[str, list[dict[str, str]]]:
     """Returns (context block to prepend to an authoring prompt, or "" if there's
@@ -81,19 +93,17 @@ def resolve_generation_context(
             log_fn("Grounding: using attached source material")
         return f"Source material:\n{excerpt}", []
 
-    if not _should_use_web(query, settings=settings, broad_trigger=broad_trigger):
+    if not _should_use_web(query, settings=settings):
         return "", []
 
     try:
         from services.grounded_chat import gather_grounded_context
 
-        # broad_trigger==True is exactly "this is a report-shaped caller"
-        # (chart/diagram/infographic/presentation/document synthesis) at every
-        # call site in this codebase — plain chat grounding never sets it —
-        # so it doubles as the signal for gather_grounded_context's stricter,
-        # relevance-filtered fetch (see its docstring) without adding a
-        # separate parameter every caller has to remember to pass.
-        web_ctx, sources = gather_grounded_context(query, log_fn=log_fn, topic_relevance=broad_trigger)
+        # topic_relevance=True — the credibility/relevance filtering and Wikipedia
+        # fallback it turns on (gather_grounded_context's docstring) are a strict
+        # improvement for every caller here. It's also gather_grounded_context's own
+        # default now — passed explicitly so that isn't a silent dependency.
+        web_ctx, sources = gather_grounded_context(query, log_fn=log_fn, topic_relevance=True)
     except Exception as ex:
         if log_fn:
             log_fn(f"Grounding: web search failed, proceeding without it: {ex}")
