@@ -512,30 +512,36 @@ if os.environ.get("LOMA_SELFTEST") == "1":
                 deps_missing[_mod] = f"{type(_e).__name__}: {_e}"[:160]
 
         # A module can import fine while still being "unavailable" to the libraries that
-        # use it: transformers/diffusers/accelerate/peft (and, as of the gguf incident
-        # below, gguf too) each gate a feature on importlib.metadata.version(dist_name)
-        # succeeding, NOT on the plain import above — and PyInstaller bundles a package's
-        # importable code without its .dist-info metadata unless copy_metadata(...) was
-        # added for it in the spec. That gap shipped a build where `import gguf` worked
-        # but diffusers' is_gguf_available() still returned False, so every FLUX Klein
-        # GGUF generation failed with a misleading generic checkpoint-parsing error
-        # instead of the real "gguf not available" one — and the deps_missing loop above
-        # didn't catch it, because a bare import was all it ever checked.
+        # use it: transformers/diffusers/accelerate/peft/gguf/sentence_transformers/
+        # torchvision/torch/safetensors/PIL/rembg/yaml each gate a feature on
+        # importlib.metadata.version(dist_name) succeeding, NOT on the plain import
+        # above — and PyInstaller bundles a package's importable code without its
+        # .dist-info metadata unless copy_metadata(...) was added for it in the spec.
+        # That gap shipped a build where `import gguf` worked but diffusers'
+        # is_gguf_available() still returned False, so every FLUX Klein GGUF
+        # generation failed with a misleading generic checkpoint-parsing error instead
+        # of the real "gguf not available" one — and the deps_missing loop above didn't
+        # catch it, because a bare import was all it ever checked.
         #
-        # Rather than special-case gguf (or whichever package trips this next), replicate
-        # the SAME lookup diffusers/transformers do internally for every tracked
-        # dependency at once: resolve each import name to its real distribution name via
-        # importlib.metadata.packages_distributions() (falling back to the import name
-        # itself, since some packages' distribution name matches it exactly) and confirm
-        # the version lookup succeeds. This is what the build's smoke-test asserts is
-        # empty — see build.yml — so a future package hitting this same gap fails the
-        # build instead of being found by a user.
+        # ONLY the packages packaging/loma_extended.spec already explicitly
+        # copy_metadata()'s for are checked here — NOT every tracked dependency. First
+        # attempt at this fix checked all of them and immediately produced ~20 false
+        # positives on the very next build (pymupdf, pandas, matplotlib, lxml, etc.) —
+        # packages that have never been given copy_metadata() because they don't
+        # gate any feature on their own metadata; PyInstaller simply never bundles
+        # metadata for most packages by default, and that's normal, not a bug. This
+        # list must stay in sync with the spec's copy_metadata() calls: adding one
+        # there means adding the same import name here.
+        _metadata_gated_deps = (
+            "PIL", "torchvision", "torch", "safetensors", "sentence_transformers",
+            "diffusers", "accelerate", "peft", "gguf", "rembg", "yaml",
+        )
         metadata_missing: dict[str, str] = {}
         try:
             pkg_dist_map = importlib.metadata.packages_distributions()
         except Exception:
             pkg_dist_map = {}
-        for _mod in _tracked_deps:
+        for _mod in _metadata_gated_deps:
             if _mod in deps_missing:
                 continue  # already reported as a straight import failure above
             candidates = pkg_dist_map.get(_mod) or [_mod]
