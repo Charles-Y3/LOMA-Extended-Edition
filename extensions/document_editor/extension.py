@@ -799,6 +799,7 @@ def build_document_viewer_panel() -> None:
                 ui.notify(tr("document_editor.upload_failed", error=ex), color="negative")
 
         from pipeline.i18n import is_cjk_locale
+        from ui.components.local_dropzone import wire_native_drop
         from ui.themes import tokens as theme_tokens
 
         dz = theme_tokens.get_theme()
@@ -833,9 +834,6 @@ def build_document_viewer_panel() -> None:
                 upload_holder["uploader"] = ui.upload(
                     on_upload=on_upload, auto_upload=True
                 ).props('dark accept=".pdf,.docx" max-files=1').classes("hidden")
-                ui.upload(on_upload=on_upload, auto_upload=True).props(
-                    'dark accept=".pdf,.docx" max-files=1'
-                ).classes("absolute inset-0 w-full h-full opacity-0 z-[5] cursor-pointer")
                 with ui.row().classes("items-center gap-2 flex-1 min-w-0 flex-nowrap relative z-[1]"):
                     with ui.row().classes("items-center gap-2 flex-1 min-w-0") as empty_prompt:
                         empty_prompt_holder["row"] = empty_prompt
@@ -844,6 +842,7 @@ def build_document_viewer_panel() -> None:
                             f"{'text-xs' if is_cjk_locale() else 'text-[11px]'} leading-snug "
                             f"{dz['dropzone_text']} flex-1"
                         )
+            wire_native_drop(dropzone_wrap, upload_holder["uploader"])
 
             def clear_viewer() -> None:
                 _doc_state["parsed"] = None

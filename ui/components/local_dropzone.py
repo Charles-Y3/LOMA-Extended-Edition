@@ -14,6 +14,58 @@ _EMPTY_DROPZONE = (
     "px-3 py-2.5 min-h-[48px] overflow-hidden cursor-pointer"
 )
 
+_DRAG_ACTIVE_CLASS = "loma-dropzone-active"
+
+
+def wire_native_drop(zone: ui.element, upload: ui.upload) -> None:
+    """Make a decorative dropzone `<div>` actually accept an HTML5 file drop.
+
+    `ui.upload` renders a real `<input type=file>` internally, but every dropzone
+    in this app draws its own decorative div on top (for the icon/label/click-to-pick
+    look) and hides the upload widget with CSS — so a browser drop landed on the
+    visible div, which had no drag handlers at all, and could never reach the
+    hidden input. This wires real dragenter/dragover/drop listeners onto the visible
+    div: dragenter/dragleave toggle a highlight class, and drop populates the
+    hidden `<input type=file>` via the DataTransfer API and fires a `change` event,
+    which is exactly what the file picker does — Quasar's uploader then picks it up
+    as normal. Must be called after both `zone` and `upload` are mounted (their DOM
+    elements need to exist)."""
+    ui.run_javascript(
+        f"""
+        (function() {{
+            const zone = document.getElementById("c{zone.id}");
+            const root = document.getElementById("c{upload.id}");
+            if (!zone || !root) return;
+            const input = root.querySelector('input[type=file]');
+            if (!input) return;
+            let depth = 0;
+            zone.addEventListener('dragenter', (e) => {{
+                e.preventDefault();
+                depth++;
+                zone.classList.add('{_DRAG_ACTIVE_CLASS}');
+            }});
+            zone.addEventListener('dragover', (e) => {{ e.preventDefault(); }});
+            zone.addEventListener('dragleave', (e) => {{
+                e.preventDefault();
+                depth = Math.max(0, depth - 1);
+                if (depth === 0) zone.classList.remove('{_DRAG_ACTIVE_CLASS}');
+            }});
+            zone.addEventListener('drop', (e) => {{
+                e.preventDefault();
+                depth = 0;
+                zone.classList.remove('{_DRAG_ACTIVE_CLASS}');
+                const files = e.dataTransfer && e.dataTransfer.files;
+                if (!files || !files.length) return;
+                const dt = new DataTransfer();
+                for (const f of files) dt.items.add(f);
+                input.files = dt.files;
+                input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }});
+        }})();
+        """
+    )
+
+
 _SOURCE_CHIP = (
     "w-full items-center justify-between gap-2 flex-nowrap group "
     "rounded-lg px-3 py-2 min-h-[36px]"
@@ -38,12 +90,13 @@ def render_local_dropzone(
         upload.run_method("pickFiles")
 
     label = hint or tr("sources.drop_hint")
-    with ui.element("div").classes(f"{_EMPTY_DROPZONE} {theme['dropzone']}").on("click", pick_files):
+    with ui.element("div").classes(f"{_EMPTY_DROPZONE} {theme['dropzone']}").on("click", pick_files) as zone:
         with ui.row().classes("w-full items-center justify-center gap-2 text-center"):
             ui.icon("cloud_upload", size="18px").classes(theme["dropzone_icon"])
             ui.label(label).classes(
                 f"{'text-xs' if is_cjk_locale() else 'text-[10px]'} leading-snug {theme['dropzone_text']}"
             )
+    wire_native_drop(zone, upload)
     return upload
 
 

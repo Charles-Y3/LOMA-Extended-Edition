@@ -494,6 +494,7 @@ async def _conversation_loop(chat_input, mic_btn, conversation) -> None:
 
 def mount_voice_mic_button(chat_input, theme_tokens: dict) -> None:
     recording = {"active": False}
+    replying = {"active": False}
     conversation = {"active": False}
     chat_input.classes("loma-chat-voice-target")
 
@@ -507,11 +508,12 @@ def mount_voice_mic_button(chat_input, theme_tokens: dict) -> None:
         notify(t("voice.recording_hint"), color="info", timeout=8000)
         result = await record_and_transcribe()
         recording["active"] = False
-        mic_btn.props("icon=mic color=default")
 
         if not isinstance(result, dict):
+            mic_btn.props("icon=mic color=default")
             return
         if not result.get("ok"):
+            mic_btn.props("icon=mic color=default")
             err = (result.get("error") or "").strip()
             if err == "too-short":
                 notify(t("voice.too_short"), color="warning")
@@ -528,11 +530,28 @@ def mount_voice_mic_button(chat_input, theme_tokens: dict) -> None:
             return
 
         text = (result.get("text") or "").strip()
-        if text:
-            chat_input.set_value(text)
-            handlers.handle_chat_action(chat_input)
-        else:
+        if not text:
+            mic_btn.props("icon=mic color=default")
             notify(t("voice.no_speech"), color="warning")
+            return
+
+        chat_input.set_value(text)
+        handlers.handle_chat_action(chat_input)
+
+        # Mirrors conversation mode's "LOMA is replying" indicator (see
+        # _conversation_loop below) — this one-shot path used to snap the icon
+        # back to a bare mic the instant transcription finished, so it looked
+        # idle for the whole reply even though a turn was in flight.
+        replying["active"] = True
+        mic_btn.props("icon=graphic_eq color=orange")
+        try:
+            from services.voice_reply import current_generation, wait_for_turn_to_finish
+
+            generation = current_generation()
+            await wait_for_turn_to_finish(generation)
+        finally:
+            replying["active"] = False
+            mic_btn.props("icon=mic color=default")
 
     async def _toggle_mic() -> None:
         if conversation["active"]:
@@ -548,6 +567,9 @@ def mount_voice_mic_button(chat_input, theme_tokens: dict) -> None:
             notify(t("voice.transcribing"), color="info")
             await stop_recording()
             return
+
+        if replying["active"]:
+            return  # LOMA is still replying to the last one-shot recording
 
         def _start() -> None:
             # NiceGUI's slot stack is keyed by id(asyncio.current_task()) (see
@@ -570,8 +592,8 @@ def mount_voice_mic_button(chat_input, theme_tokens: dict) -> None:
             notify(t("voice.conversation_stopped"), color="info")
             await stop_recording()
             return
-        if recording["active"]:
-            return  # a one-shot recording is already in progress
+        if recording["active"] or replying["active"]:
+            return  # a one-shot recording (or its reply) is already in progress
 
         def _start() -> None:
             from services.session import state

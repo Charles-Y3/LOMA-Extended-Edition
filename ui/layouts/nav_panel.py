@@ -11,6 +11,7 @@ from services.session import settings as session_settings
 from services.session import state
 from ui.branding import LOMA_ICON_URL
 from ui.components.attachments_hub import mount_sources_uploader, render_sources_hub
+from ui.components.local_dropzone import wire_native_drop
 from ui.components.loma_facts import bind_loma_icon_spark
 from ui.themes import registry
 
@@ -149,9 +150,15 @@ def build_nav_panel(t: dict, settings_dialog: ui.dialog, tips_dialog: ui.dialog)
         with ui.column().classes(
             "w-full flex-1 flex flex-col flex-nowrap min-h-0 gap-1 overflow-y-auto overflow-x-hidden loma-scroll"
         ):
-            with ui.element("div").classes("relative w-full shrink-0"):
+            with ui.element("div").classes("relative w-full shrink-0") as sources_wrap:
                 mount_sources_uploader(t)
                 render_sources_hub()
+            if registry.sources_uploader:
+                # Wired on this persistent wrapper (not the empty-state dropzone div),
+                # since that div only exists while Sources is empty — after the first
+                # file it's replaced by the file-card list, and a second, separate
+                # drag needs somewhere to land too (see file_dropzone.py).
+                wire_native_drop(sources_wrap, registry.sources_uploader)
 
             with ui.column().classes("w-full shrink-0 flex-none gap-3 pt-3"):
                 ui.separator().classes(f"{t['separator']}")

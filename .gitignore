@@ -26,6 +26,7 @@ data/email_assistant/token.json
 # --- Debug / log output ---
 debug-*.log
 *.log
+logs/
 
 # --- Recorded / generated media that can reappear during dev or testing ---
 *.wav

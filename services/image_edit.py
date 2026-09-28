@@ -111,6 +111,7 @@ def _run_img2img(
     from services.system.profiler import resolve_torch_device
 
     device = resolve_torch_device()
+    # fp16 stays cuda-only — see services/image_generation.py's _load_pipeline() for why.
     dtype = torch.float16 if device == "cuda" else torch.float32
     pipe = load_edit_pipeline(
         model_id,

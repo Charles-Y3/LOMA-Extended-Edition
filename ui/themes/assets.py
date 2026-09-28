@@ -298,6 +298,10 @@ def inject_custom_assets() -> None:
             .loma-sources-uploader-overlay {
                 pointer-events: none !important;
             }
+            .loma-dropzone-active {
+                border-color: #60a5fa !important;
+                background: rgba(96, 165, 250, 0.1) !important;
+            }
 
             .hidden-uploader .q-uploader__list,
             .hidden-uploader .q-uploader__header { display: none !important; }

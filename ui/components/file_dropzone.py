@@ -11,7 +11,12 @@ _EMPTY_DROPZONE = (
 
 
 def render_empty_dropzone(refresh_callback) -> None:
-    """Visual drop hint only — uploads go through the persistent sources uploader overlay."""
+    """Visual drop hint only — dragging is handled by the persistent wrapper around
+    the whole Sources panel (see mount_sources_drop_target() in nav_panel.py), which
+    stays in the DOM whether the panel is empty or already has files, so a second
+    separate drag (after the first file already replaced this empty view with the
+    card list) still has something to land on. This div is just the empty-state
+    click-to-pick visual."""
     t = tokens.get_theme()
 
     def pick_files() -> None:

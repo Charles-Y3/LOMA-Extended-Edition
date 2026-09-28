@@ -559,11 +559,10 @@ class SetupWizard:
         shared progress bar, same spirit as the LLM tier step; skipping just means the
         user picks one later from Settings → Model Library, or the app auto-downloads
         DreamShaper 8 the first time it's needed."""
-        from services.model_router import image_catalog_entries, installed_image_generation_options
+        from services.model_router import image_catalog_entries
 
         self._clear_step()
         entries = image_catalog_entries()
-        already_installed = bool(installed_image_generation_options(state.current_settings)[0])
 
         with self.step_container:
             ui.label(t("setup.step.image_model")).classes("text-sm font-bold mt-2")
@@ -630,11 +629,14 @@ class SetupWizard:
                 state.current_settings["default_image_model"] = names[0]
                 session_settings.save_settings(state.current_settings, quiet=True)
                 dl_btn.disable()
+                if self.progress_bar is not None:
+                    self.progress_bar.set_visibility(True)
+                if self.status_label is not None:
+                    self.status_label.set_visibility(True)
                 threading.Thread(target=_download_all, args=(names, dl_btn), daemon=True).start()
 
             with ui.row().classes("w-full justify-end gap-2 mt-6"):
-                if self.is_rerun or already_installed or not entries:
-                    ui.button(t("setup.skip"), on_click=self._finish).props("flat")
+                ui.button(t("setup.skip"), on_click=self._finish).props("flat")
                 dl_btn = ui.button(t("setup.image_model.download_continue"), color="primary")
                 if not self.online or not entries:
                     dl_btn.disable()

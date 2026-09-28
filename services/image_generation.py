@@ -716,20 +716,23 @@ def place_edit_pipeline_on_device(pipe, device: str, model_id: str = "") -> Any:
     import torch
 
     sdxl_like = _pipeline_kind(model_id) in ("sdxl", "sdxl_lightning")
-    if device == "cuda":
+    # See _load_pipeline()'s matching block for why mps is grouped with cuda here
+    # instead of falling into the cpu "always minimize memory" branch.
+    if device in ("cuda", "mps"):
         total_vram = 0.0
-        try:
-            total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        except Exception:
-            pass
+        if device == "cuda":
+            try:
+                total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            except Exception:
+                pass
         min_vram = 8.0 if sdxl_like else 4.0
         if CPU_OFFLOAD_MODE == "on":
-            use_offload = True
+            use_offload = device == "cuda"
         elif CPU_OFFLOAD_MODE == "off":
             use_offload = False
         else:  # auto
-            use_offload = 0.0 < total_vram < min_vram
-        memory_constrained = use_offload or (0.0 < total_vram < min_vram + 2.0)
+            use_offload = device == "cuda" and 0.0 < total_vram < min_vram
+        memory_constrained = use_offload or (device == "cuda" and 0.0 < total_vram < min_vram + 2.0)
     else:
         use_offload = False
         memory_constrained = True  # CPU: always minimize memory footprint
@@ -1064,6 +1067,10 @@ def _load_pipeline(
         from services.system.profiler import resolve_torch_device
 
         device = resolve_torch_device()
+        # fp16 stays cuda-only: fp16 on mps has a real history of black/NaN output on
+        # some macOS/PyTorch combinations (unverified here — no Mac to test against),
+        # so it keeps the known-safe fp32 fallback DESKTOP_APP_LESSONS.md calls for.
+        # Only the memory/slicing decision below is changed for mps.
         dtype = torch.float16 if device == "cuda" else torch.float32
 
         if family == "flux_klein_gguf":
@@ -1183,21 +1190,27 @@ def _load_pipeline(
         # dramatically faster than CPU offload (which shuttles weights over PCIe every
         # step); attention/VAE slicing likewise trade compute speed for memory. Only use
         # them when actually memory-constrained — SDXL-scale needs ~8GB VRAM, SD1.5 ~4GB.
-        if device == "cuda":
+        # Apple Silicon (mps) has no separate VRAM pool to run short on — unified memory
+        # is typically 16-64GB — so it gets the cuda-style "plenty of headroom" treatment,
+        # not the cpu-style "always minimize" one; forcing slicing there only serializes
+        # the GPU's own compute into smaller chunks for no memory benefit.
+        if device in ("cuda", "mps"):
             total_vram = 0.0
-            try:
-                total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            except Exception:
-                pass
+            if device == "cuda":
+                try:
+                    total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                except Exception:
+                    pass
             min_vram = 8.0 if sdxl_like else 4.0
             if CPU_OFFLOAD_MODE == "on":
-                use_offload = True
+                use_offload = device == "cuda"
             elif CPU_OFFLOAD_MODE == "off":
                 use_offload = False
             else:  # auto
-                use_offload = 0.0 < total_vram < min_vram
+                use_offload = device == "cuda" and 0.0 < total_vram < min_vram
             # Slice only when tight (offloading, or little headroom above the model size).
-            memory_constrained = use_offload or (0.0 < total_vram < min_vram + 2.0)
+            # mps never measures total_vram, so it only slices via an explicit "on".
+            memory_constrained = use_offload or (device == "cuda" and 0.0 < total_vram < min_vram + 2.0)
         else:
             use_offload = False
             memory_constrained = True  # CPU: always minimize memory footprint
